@@ -1,6 +1,6 @@
 // Adam Web : garde l'appli disponible même avec une connexion faible.
-const CACHE = 'adam-web-v2';
-const FICHIERS = ['./', './index.html', './app.css', './app.js', './fourrure.js', './legal.js', './manifest.webmanifest', './img/icone-180.png', './img/icone-512.png', './img/favicon.png'];
+const CACHE = 'adam-web-v3';
+const FICHIERS = ['./', './index.html', './app.css', './app.js', './fourrure.js', './legal.js', './manifest.webmanifest', './icone-180.png', './icone-512.png', './favicon.png'];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FICHIERS)).then(() => self.skipWaiting()));
 });
