@@ -371,14 +371,21 @@ function decoupeur(surPhrase) {
   };
 }
 function streamIA(messages, surTexte) {
-  var essais = modeles.length ? modeles.slice() : PREFERES.slice(0, 3);
+  var essais = modeles.length ? modeles.slice() : PREFERES.slice(0, 3), limite = false, reessaye = {};
   function essayer(i) {
-    if (i >= essais.length) { var e = new Error("MODELE"); e.code = "MODELE"; return Promise.reject(e); }
-    var modele = essais[i], corpsReq = { model: modele, messages: messages, temperature: .6, max_tokens: 700, stream: true, tools: OUTILS, tool_choice: "auto" };
+    if (i >= essais.length) { var e = new Error(limite ? "LIMITE" : "MODELE"); e.code = limite ? "LIMITE" : "MODELE"; return Promise.reject(e); }
+    var modele = essais[i], corpsReq = { model: modele, messages: messages, temperature: .6, max_tokens: 450, stream: true, tools: OUTILS, tool_choice: "auto" };
     if (/gpt-oss/.test(modele)) corpsReq.reasoning_effort = "low";
     return groq("chat/completions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpsReq) }).then(function (r) {
       if (r.status === 401 || r.status === 403) { var e = new Error("CLE"); e.code = "CLE"; throw e; }
-      if (!r.ok) return r.text().then(function () { return essayer(i + 1); });
+      if (!r.ok) return r.text().then(function (t) {
+        var m = /try again in ([\d.]+)(ms|s)/i.exec(t || ""), att = m ? Math.ceil(parseFloat(m[1]) * (m[2] === "ms" ? 1 : 1000)) : 1500;
+        if (r.status === 429) {
+          limite = true;
+          if (!reessaye[i] && att <= 12000) { reessaye[i] = true; elEtat.textContent = "Un instant…"; return new Promise(function (ok) { setTimeout(ok, att + 300); }).then(function () { return essayer(i); }); }
+        }
+        return essayer(i + 1);
+      });
       var lecteur = r.body.getReader(), dec = new TextDecoder(), tampon = "", contenu = "", appels = [];
       function lire() {
         return lecteur.read().then(function (o) {
@@ -427,7 +434,7 @@ function traiter(texte) {
   elReponse.textContent = ""; elActions.innerHTML = ""; reponseCourante = ""; $("btnSignaler").hidden = true;
   etat("thinking"); astuce("");
   historique.push({ role: "user", content: texte }); sauverHistorique();
-  var messages = [{ role: "system", content: promptSysteme() }].concat(historique.slice(-16));
+  var messages = [{ role: "system", content: promptSysteme() }].concat(historique.slice(-8));
   var dec = decoupeur(recevoirPhrase), tours = 0;
   function tour() {
     return streamIA(messages, function (t) { dec.push(t); }).then(function (r) {
@@ -458,6 +465,7 @@ function traiter(texte) {
     occupe = false; etat("");
     var msg = e.code === "CLE" ? "Ta clé Groq est refusée. Vérifie-la dans les réglages."
       : e.code === "RELAIS" ? "Ton navigateur bloque l'accès direct à Groq. Le site doit activer le relais (voir le guide)."
+      : e.code === "LIMITE" ? "Groq me demande de patienter un instant (limite gratuite). Réessaie dans une minute."
       : e.code === "MODELE" ? "Aucun modèle Groq ne répond pour l'instant. Réessaie dans un instant."
       : "Je n'arrive pas à joindre internet. Vérifie ta connexion.";
     elReponse.textContent = msg; emotion("triste", 3000); dire(msg);
