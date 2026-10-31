@@ -1,0 +1,16 @@
+{
+  "name": "Adam",
+  "short_name": "Adam",
+  "description": "Ton petit nuage assistant : parle-lui, il te répond.",
+  "lang": "fr",
+  "start_url": "./?source=accueil",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    { "src": "img/icone-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "img/icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

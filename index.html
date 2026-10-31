@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Adam</title>
+<meta name="description" content="Adam, ton petit nuage assistant : parle-lui, il te répond.">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Adam">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="img/icone-180.png">
+<link rel="icon" type="image/png" href="img/favicon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700&family=Hanken+Grotesk:wght@400;500;600&family=Martian+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body data-perso="adam">
+<div id="fond"></div>
+<canvas id="feux" aria-hidden="true"></canvas>
+
+<div class="ecran">
+  <header class="haut">
+    <div class="marque"><img src="img/icone-180.png" alt="" style="border-radius:8px"> adam</div>
+    <button class="rond" id="btnDiscussion" type="button" aria-label="Discussion">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>
+    </button>
+    <button class="rond" id="btnReglages" type="button" aria-label="Réglages">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </header>
+
+  <main class="scene">
+    <div id="cloud" role="button" tabindex="0" aria-label="Parler à Adam">
+<svg viewBox="0 0 260 190" id="cloudSvg" aria-hidden="true">
+        <defs>
+          <!-- v14 : LA FAMILLE D'ADAM — 6 persos en pate a modeler brillante -->
+          <clipPath id="c-adam">
+            <ellipse cx="130" cy="126" rx="98" ry="50"/><ellipse cx="80" cy="96" rx="50" ry="44"/>
+            <ellipse cx="180" cy="96" rx="50" ry="44"/><ellipse cx="130" cy="70" rx="58" ry="48"/>
+          </clipPath>
+          <clipPath id="c-nova"><ellipse cx="130" cy="108" rx="86" ry="76"/></clipPath>
+          <clipPath id="c-mochi"><path d="M28 134 C28 78 72 52 130 52 C188 52 232 78 232 134 C232 170 196 182 130 182 C64 182 28 170 28 134 Z"/></clipPath>
+          <clipPath id="c-piment"><path d="M130 24 C178 24 214 86 214 128 C214 164 180 184 130 184 C80 184 46 164 46 128 C46 86 82 24 130 24 Z"/></clipPath>
+          <clipPath id="c-miel"><path d="M52 86 C52 52 88 44 130 44 C172 44 208 52 208 86 L216 150 C218 174 186 184 130 184 C74 184 42 174 44 150 Z"/></clipPath>
+          <clipPath id="c-pousse"><path d="M130 30 C188 30 212 76 210 118 C208 162 176 184 130 184 C84 184 52 162 50 118 C48 76 72 30 130 30 Z"/></clipPath>
+
+          <!-- matiere : une couleur par perso (clair en haut a gauche, profond sur les bords) -->
+          <radialGradient id="g-adam" cx="36%" cy="24%" r="85%"><stop offset="0" stop-color="#d9f1ff"/><stop offset=".45" stop-color="#5cb4ff"/><stop offset="1" stop-color="#1d5fe0"/></radialGradient>
+          <radialGradient id="g-nova" cx="36%" cy="26%" r="82%"><stop offset="0" stop-color="#eee3ff"/><stop offset=".45" stop-color="#a27bff"/><stop offset="1" stop-color="#5226cf"/></radialGradient>
+          <radialGradient id="g-mochi" cx="36%" cy="26%" r="85%"><stop offset="0" stop-color="#ffe6f2"/><stop offset=".45" stop-color="#ff7dba"/><stop offset="1" stop-color="#d42a78"/></radialGradient>
+          <radialGradient id="g-piment" cx="36%" cy="26%" r="84%"><stop offset="0" stop-color="#ffe2d8"/><stop offset=".45" stop-color="#ff7656"/><stop offset="1" stop-color="#cf2f1d"/></radialGradient>
+          <radialGradient id="g-miel" cx="36%" cy="26%" r="84%"><stop offset="0" stop-color="#fff6cf"/><stop offset=".45" stop-color="#ffc640"/><stop offset="1" stop-color="#e07f06"/></radialGradient>
+          <radialGradient id="g-pousse" cx="36%" cy="26%" r="84%"><stop offset="0" stop-color="#e9ffd9"/><stop offset=".45" stop-color="#74da5e"/><stop offset="1" stop-color="#258f35"/></radialGradient>
+          <linearGradient id="g-ombreBas" x1="0" y1="0" x2="0" y2="1"><stop offset=".55" stop-color="#140a30" stop-opacity="0"/><stop offset="1" stop-color="#140a30" stop-opacity=".26"/></linearGradient>
+          <radialGradient id="g-rim" cx="50%" cy="45%" r="62%"><stop offset=".72" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity=".32"/></radialGradient>
+          <radialGradient id="g-reflet" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#fff" stop-opacity=".9"/><stop offset=".6" stop-color="#fff" stop-opacity=".25"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+          <radialGradient id="g-sol" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#140a30" stop-opacity=".22"/><stop offset="1" stop-color="#140a30" stop-opacity="0"/></radialGradient>
+          <radialGradient id="g-etoile" cx="40%" cy="30%" r="70%"><stop offset="0" stop-color="#fff6b0"/><stop offset="1" stop-color="#ffb800"/></radialGradient>
+          <radialGradient id="g-casque" cx="35%" cy="30%" r="75%"><stop offset="0" stop-color="#6c6c8e"/><stop offset="1" stop-color="#22223a"/></radialGradient>
+          <radialGradient id="g-couronne" cx="40%" cy="30%" r="80%"><stop offset="0" stop-color="#ffd9ea"/><stop offset="1" stop-color="#f0498c"/></radialGradient>
+          <radialGradient id="g-flamme" cx="40%" cy="70%" r="80%"><stop offset="0" stop-color="#fff2a8"/><stop offset=".5" stop-color="#ffb12e"/><stop offset="1" stop-color="#ff6a1f"/></radialGradient>
+          <radialGradient id="g-feuille" cx="35%" cy="30%" r="80%"><stop offset="0" stop-color="#c8ff9e"/><stop offset="1" stop-color="#2f9e2f"/></radialGradient>
+          <radialGradient id="pupG" cx="38%" cy="28%" r="70%"><stop offset="0" stop-color="#3b3352"/><stop offset="1" stop-color="#0d0a18"/></radialGradient>
+          <filter id="flou" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3"/></filter>
+          <!-- v15 : fourrure douce (bords duveteux + grain de feutrine) -->
+          <filter id="fourrure" x="-8%" y="-12%" width="116%" height="124%">
+            <feTurbulence type="fractalNoise" baseFrequency=".55" numOctaves="2" seed="4" result="n"/>
+            <feDisplacementMap in="SourceGraphic" in2="n" scale="4.5" xChannelSelector="R" yChannelSelector="G" result="d"/>
+            <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="9" result="g"/>
+            <feColorMatrix in="g" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .34 -.15" result="clair"/>
+            <feColorMatrix in="g" type="matrix" values="0 0 0 0 .08  0 0 0 0 .04  0 0 0 0 .2  0 0 0 -.3 .1" result="sombre"/>
+            <feComposite in="clair" in2="d" operator="in" result="c2"/>
+            <feComposite in="sombre" in2="d" operator="in" result="s2"/>
+            <feMerge><feMergeNode in="d"/><feMergeNode in="s2"/><feMergeNode in="c2"/></feMerge>
+          </filter>
+        </defs>
+
+        <!-- ombre au sol -->
+        <ellipse id="sol" cx="130" cy="186" rx="78" ry="7" fill="url(#g-sol)"/>
+
+        <g id="cloudBody" filter="url(#fourrure)">
+          <!-- ADAM : le nuage (bleu) -->
+          <g class="corps" data-p="adam">
+            <g clip-path="url(#c-adam)">
+              <rect width="260" height="190" fill="url(#g-adam)"/><rect width="260" height="190" fill="url(#g-ombreBas)"/>
+              <rect width="260" height="190" fill="url(#g-rim)"/>
+              <ellipse cx="98" cy="50" rx="34" ry="16" fill="url(#g-reflet)" transform="rotate(-18 98 50)"/>
+              <ellipse cx="84" cy="44" rx="7" ry="4" fill="#fff" opacity=".9" transform="rotate(-25 84 44)"/>
+            </g>
+          </g>
+
+          <!-- NOVA : la boule a antenne etoilee (violet) -->
+          <g class="corps" data-p="nova">
+            <g class="acc acc-antenne"><path d="M130 34 Q127 18 139 8" fill="none" stroke="#6a3fe0" stroke-width="5" stroke-linecap="round"/>
+            <g class="acc acc-etoile"><path d="M140 -6 L144.5 3 L154 4.2 L147 10.8 L148.8 20.2 L140 15.6 L131.2 20.2 L133 10.8 L126 4.2 L135.5 3 Z" fill="url(#g-etoile)" stroke="#ffb800" stroke-width="2.5" stroke-linejoin="round"/></g></g>
+            <g clip-path="url(#c-nova)">
+              <rect width="260" height="190" fill="url(#g-nova)"/><rect width="260" height="190" fill="url(#g-ombreBas)"/>
+              <rect width="260" height="190" fill="url(#g-rim)"/>
+              <ellipse cx="96" cy="58" rx="30" ry="16" fill="url(#g-reflet)" transform="rotate(-28 96 58)"/>
+              <ellipse cx="84" cy="54" rx="7" ry="4" fill="#fff" opacity=".9" transform="rotate(-35 84 54)"/>
+            </g>
+          </g>
+
+          <!-- MOCHI : le mochi au casque audio (rose) -->
+          <g class="corps" data-p="mochi">
+            <g clip-path="url(#c-mochi)">
+              <rect width="260" height="190" fill="url(#g-mochi)"/><rect width="260" height="190" fill="url(#g-ombreBas)"/>
+              <rect width="260" height="190" fill="url(#g-rim)"/>
+              <ellipse cx="88" cy="74" rx="34" ry="14" fill="url(#g-reflet)" transform="rotate(-16 88 74)"/>
+              <ellipse cx="72" cy="72" rx="7" ry="4" fill="#fff" opacity=".9" transform="rotate(-20 72 72)"/>
+            </g>
+            <g class="acc acc-casque"><path d="M40 118 C36 40 224 40 220 118" fill="none" stroke="#2c2c48" stroke-width="9" stroke-linecap="round"/>
+            <path d="M48 92 C64 52 196 52 212 92" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="2.5" stroke-linecap="round"/>
+            <rect x="18" y="98" width="30" height="44" rx="13" fill="url(#g-casque)"/>
+            <rect x="212" y="98" width="30" height="44" rx="13" fill="url(#g-casque)"/>
+            <rect x="24" y="104" width="7" height="16" rx="3.5" fill="#fff" opacity=".25"/>
+            <rect x="218" y="104" width="7" height="16" rx="3.5" fill="#fff" opacity=".25"/></g>
+          </g>
+
+          <!-- PIMENT : l'oeuf a la petite flamme (corail) -->
+          <g class="corps" data-p="piment">
+            <g class="acc acc-flamme"><path d="M130 30 C112 20 120 4 134 -4 C130 6 144 8 146 18 C148 26 140 32 130 30 Z" fill="url(#g-flamme)"/>
+            <path d="M131 26 C124 20 128 12 134 8 C134 14 140 16 139 21 C138 25 135 27 131 26 Z" fill="#fff4b8" opacity=".85"/></g>
+            <g clip-path="url(#c-piment)">
+              <rect width="260" height="190" fill="url(#g-piment)"/><rect width="260" height="190" fill="url(#g-ombreBas)"/>
+              <rect width="260" height="190" fill="url(#g-rim)"/>
+              <ellipse cx="100" cy="62" rx="26" ry="14" fill="url(#g-reflet)" transform="rotate(-40 100 62)"/>
+              <ellipse cx="90" cy="60" rx="6" ry="3.6" fill="#fff" opacity=".9" transform="rotate(-48 90 60)"/>
+            </g>
+          </g>
+
+          <!-- MIEL : le flan a la couronne (dore) -->
+          <g class="corps" data-p="miel">
+            <g clip-path="url(#c-miel)">
+              <rect width="260" height="190" fill="url(#g-miel)"/><rect width="260" height="190" fill="url(#g-ombreBas)"/>
+              <path d="M40 40 H220 V70 C206 70 204 84 192 84 C180 84 180 66 166 70 C154 74 156 92 142 90 C130 88 132 72 118 72 C104 72 106 86 92 84 C80 82 82 68 68 70 C56 72 50 66 40 64 Z" fill="#c4650a" opacity=".55"/>
+              <rect width="260" height="190" fill="url(#g-rim)"/>
+              <ellipse cx="94" cy="58" rx="30" ry="10" fill="url(#g-reflet)" transform="rotate(-8 94 58)"/>
+              <ellipse cx="80" cy="56" rx="7" ry="3.6" fill="#fff" opacity=".9" transform="rotate(-10 80 56)"/>
+            </g>
+            <g class="acc acc-couronne"><path d="M100 48 L97 20 L114 34 L130 12 L146 34 L163 20 L160 48 Z" fill="url(#g-couronne)" stroke="#e23a7f" stroke-width="2.5" stroke-linejoin="round"/>
+            <circle cx="97" cy="19" r="4.5" fill="#fff4fa"/><circle cx="130" cy="11" r="5" fill="#fff4fa"/><circle cx="163" cy="19" r="4.5" fill="#fff4fa"/></g>
+          </g>
+
+          <!-- POUSSE : le haricot a la pousse (vert) -->
+          <g class="corps" data-p="pousse">
+            <g class="acc acc-pousse"><path d="M130 34 C130 26 129 20 127 14" fill="none" stroke="#2f8f2f" stroke-width="4.5" stroke-linecap="round"/>
+            <path d="M127 16 C112 2 96 6 92 15 C104 24 118 24 127 16 Z" fill="url(#g-feuille)"/>
+            <path d="M128 14 C140 -2 160 0 165 9 C152 20 138 20 128 14 Z" fill="url(#g-feuille)"/>
+            <path d="M125 15 C114 11 104 12 97 15 M130 13 C142 8 152 7 160 9" fill="none" stroke="#1f7a1f" stroke-opacity=".45" stroke-width="1.6" stroke-linecap="round"/></g>
+            <g clip-path="url(#c-pousse)">
+              <rect width="260" height="190" fill="url(#g-pousse)"/><rect width="260" height="190" fill="url(#g-ombreBas)"/>
+              <rect width="260" height="190" fill="url(#g-rim)"/>
+              <ellipse cx="98" cy="62" rx="28" ry="15" fill="url(#g-reflet)" transform="rotate(-32 98 62)"/>
+              <ellipse cx="86" cy="58" rx="6.5" ry="3.8" fill="#fff" opacity=".9" transform="rotate(-38 86 58)"/>
+            </g>
+          </g>
+        </g>
+
+        <!-- Yeux : deux petits points brillants -->
+        <g id="eyes">
+          <ellipse class="eyeW eyeWL" cx="110" cy="96" rx="11" ry="14" fill="transparent"/>
+          <ellipse class="eyeW eyeWR" cx="150" cy="96" rx="11" ry="14" fill="transparent"/>
+          <g class="pupil pupilL">
+            <ellipse class="iris" cx="110" cy="96" rx="9.5" ry="12" fill="url(#pupG)"/>
+            <circle class="sp big" cx="106.5" cy="90.5" r="3.6" fill="#fff"/>
+            <circle class="sp sml" cx="113" cy="100" r="1.6" fill="#fff" opacity=".7"/>
+          </g>
+          <g class="pupil pupilR">
+            <ellipse class="iris" cx="150" cy="96" rx="9.5" ry="12" fill="url(#pupG)"/>
+            <circle class="sp big" cx="146.5" cy="90.5" r="3.6" fill="#fff"/>
+            <circle class="sp sml" cx="153" cy="100" r="1.6" fill="#fff" opacity=".7"/>
+          </g>
+        </g>
+
+        <!-- yeux heureux ^^ / clin d'oeil -->
+        <g id="happyEyes" fill="none" stroke="#1d1530" stroke-width="5" stroke-linecap="round">
+          <path class="arcL" d="M99 100 Q110 84 121 100"/>
+          <path class="arcR" d="M139 100 Q150 84 161 100"/>
+        </g>
+        <!-- yeux coeur -->
+        <g id="heartEyes" fill="#ff3d7a" stroke="#fff" stroke-width="1.8">
+          <path class="hL" d="M110 108 C95 98 98 82 110 90 C122 82 125 98 110 108 Z"/>
+          <path class="hR" d="M150 108 C135 98 138 82 150 90 C162 82 165 98 150 108 Z"/>
+        </g>
+        <!-- larme -->
+        <path id="larme" d="M98 110 Q90 123 98 130 Q106 123 98 110 Z" fill="#7fd0ff" stroke="#fff" stroke-width="1.5"/>
+
+        <!-- Joues -->
+        <ellipse class="blush" cx="88" cy="114" rx="11" ry="6.5" fill="#ff9cc0" opacity=".35"/>
+        <ellipse class="blush" cx="172" cy="114" rx="11" ry="6.5" fill="#ff9cc0" opacity=".35"/>
+
+        <!-- Bouche -->
+        <path id="mouth" d="M121 116 Q130 124 139 116" stroke="#2a1838" stroke-width="2.8" fill="none" stroke-linecap="round"/>
+
+        <!-- Etoiles decoratives -->
+        <g id="deco">
+          <path class="star s1" d="M30 52l2.5 5 5.5.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.5-.8z" fill="#fff"/>
+          <path class="star s2" d="M228 44l2 4 4.4.6-3.2 3.1.7 4.4-3.9-2.1-3.9 2.1.7-4.4-3.2-3.1 4.4-.6z" fill="#fff"/>
+          <circle class="star s3" cx="22" cy="88" r="2" fill="#fff"/>
+          <circle class="star s4" cx="238" cy="80" r="1.6" fill="#fff"/>
+          <circle class="star s5" cx="48" cy="34" r="1.5" fill="#fff"/>
+          <circle class="star s6" cx="212" cy="30" r="1.5" fill="#fff"/>
+        </g>
+
+        <!-- Points de reflexion -->
+        <g id="thinkDots" opacity="0">
+          <circle cx="196" cy="50" r="3.4" fill="#fff"/>
+          <circle cx="208" cy="40" r="2.7" fill="#fff" opacity=".75"/>
+          <circle cx="218" cy="31" r="2" fill="#fff" opacity=".45"/>
+        </g>
+      </svg>
+    </div>
+    <div id="ombre" aria-hidden="true"></div>
+    <canvas id="ligne" aria-hidden="true"></canvas>
+    <div class="paroles" aria-live="polite">
+      <div id="etat"></div>
+      <div id="dejaDit"></div>
+      <div id="reponse">Coucou, je suis Adam !</div>
+      <button class="signaler" id="btnSignaler" type="button" hidden>Signaler cette réponse</button>
+      <div class="actions-carte" id="actions"></div>
+      <div class="minuteurs" id="minuteurs"></div>
+    </div>
+  </main>
+
+  <footer class="bas">
+    <form class="saisie" id="saisie" hidden>
+      <input id="texte" type="text" enterkeyhint="send" autocomplete="off" placeholder="Écris à Adam…" aria-label="Message pour Adam">
+      <button type="submit">Envoyer</button>
+    </form>
+    <div class="commandes">
+      <button class="rond" id="btnClavier" type="button" aria-label="Écrire au lieu de parler">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>
+      </button>
+      <button id="micro" type="button" aria-label="Parler à Adam">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V22h2v-3.08A7 7 0 0 0 19 12h-2z"/></svg>
+      </button>
+      <button class="rond" id="btnStop" type="button" aria-label="Faire taire Adam">
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+      </button>
+    </div>
+    <div class="astuce" id="astuce">Touche le micro et parle.</div>
+  </footer>
+</div>
+
+<div class="voile" id="voile" hidden></div>
+
+<!-- Bienvenue -->
+<section class="feuille" id="bienvenue" role="dialog" aria-modal="true" aria-labelledby="bvTitre" hidden>
+  <div class="poignee"></div>
+  <div class="etape-dots" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  <div data-etape="1">
+    <h2 id="bvTitre">Salut, je suis Adam</h2>
+    <p>Ton petit nuage assistant. Parle-moi : je te réponds à voix haute, je donne la météo, je cherche sur Wikipédia, je lance des minuteurs, je prends tes notes et je retiens ce que tu me confies.</p>
+    <div id="astuceInstall" hidden>
+      <h3>Installe-moi</h3>
+      <p>Touche <span class="partager" aria-label="Partager"><svg viewBox="0 0 24 24" fill="none" stroke="#2f6bff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg></span> en bas de Safari, puis <strong>Sur l'écran d'accueil</strong>. Je serai là, comme une vraie appli.</p>
+    </div>
+    <button class="btn large" data-suivant="2" type="button">Commencer</button>
+  </div>
+  <div data-etape="2" hidden>
+    <h2 id="cTitre">Avant de commencer</h2>
+    <p id="cIntro"></p>
+    <label class="coche"><input type="checkbox" id="cIA"> <span id="cIALabel"></span></label>
+    <p class="petit" id="cIADetail"></p>
+    <p class="petit" id="cPied"></p>
+    <p class="petit"><a href="#" class="lienLegal" data-doc="confidentialite">Politique de confidentialité</a> · <a href="#" class="lienLegal" data-doc="conditions">Conditions d'utilisation</a></p>
+    <button class="btn large" id="cAccepter" type="button" disabled>Accepter et continuer</button>
+    <button class="btn doux large" id="cRefuser" type="button" style="margin-top:10px">Non merci</button>
+  </div>
+  <div data-etape="3" hidden>
+    <h2>Ta clé gratuite pour mon cerveau</h2>
+    <p>Je réfléchis grâce à Groq, c'est <strong>gratuit</strong> :</p>
+    <ol>
+      <li>Ouvre le site de Groq avec le bouton ci-dessous et crée un compte.</li>
+      <li>Touche <strong>Create API Key</strong>, nomme-la « Adam », puis copie la clé (elle commence par <strong>gsk_</strong>).</li>
+      <li>Reviens ici et colle-la.</li>
+    </ol>
+    <a class="btn doux large" href="https://console.groq.com/keys" target="_blank" rel="noopener">Ouvrir console.groq.com</a>
+    <div style="height:12px"></div>
+    <input class="champ" id="bvCle" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Colle ta clé gsk_… ici" aria-label="Clé Groq">
+    <div class="msg" id="bvMsg"></div>
+    <button class="btn large" id="bvTester" type="button" style="margin-top:6px">Vérifier ma clé</button>
+    <p style="font-size:13px;margin-top:12px">Ta clé reste sur ce téléphone. Personne d'autre ne la voit.</p>
+  </div>
+  <div data-etape="4" hidden>
+    <h2>Dernière chose : le micro</h2>
+    <p>Pour que je t'entende, autorise le micro. Je n'écoute que quand tu touches le bouton.</p>
+    <button class="btn large" id="bvMicro" type="button">Autoriser le micro et commencer</button>
+    <button class="btn doux large" id="bvSansMicro" type="button" style="margin-top:10px">Plus tard, je vais écrire</button>
+  </div>
+</section>
+
+<!-- Réglages -->
+<section class="feuille" id="reglages" role="dialog" aria-modal="true" aria-labelledby="rgTitre" hidden>
+  <div class="poignee"></div>
+  <h2 id="rgTitre">Réglages</h2>
+  <h3>Clé Groq</h3>
+  <div class="ligneChamp"><input class="champ" id="rgCle" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="gsk_…" aria-label="Clé Groq"><button class="btn" id="rgTester" type="button">Vérifier</button></div>
+  <div class="msg" id="rgMsg"></div>
+  <a href="https://console.groq.com/keys" target="_blank" rel="noopener" style="color:var(--ciel);font-size:14px">Créer ou retrouver ma clé sur console.groq.com</a>
+  <h3>Voix</h3>
+  <select class="champ" id="rgVoix" aria-label="Voix d'Adam"></select>
+  <label style="display:flex;align-items:center;gap:12px;margin-top:12px;color:var(--brume);font-size:15px">Vitesse <input id="rgVitesse" type="range" min="0.8" max="1.4" step="0.05" style="flex:1"></label>
+  <button class="btn doux" id="rgEssai" type="button" style="margin-top:10px">Écouter</button>
+  <h3>Couleur</h3>
+  <div class="nuancier" id="rgCouleurs" role="group" aria-label="Couleur d'Adam">
+    <button class="teinte" data-t="bleu" style="--c:#7ec0ff" type="button"><i></i>Adam</button>
+    <button class="teinte" data-t="violet" style="--c:#b49bff" type="button"><i></i>Nova</button>
+    <button class="teinte" data-t="rose" style="--c:#ff9cc4" type="button"><i></i>Mochi</button>
+    <button class="teinte" data-t="rouge" style="--c:#ff8a7a" type="button"><i></i>Piment</button>
+    <button class="teinte" data-t="or" style="--c:#ffc970" type="button"><i></i>Miel</button>
+    <button class="teinte" data-t="vert" style="--c:#8ce0a8" type="button"><i></i>Pousse</button>
+    <button class="teinte" data-t="arcenciel" style="--c:#ff9cc4" type="button"><i style="background:conic-gradient(#ff7a7a,#ffc970,#8ce0a8,#7ec0ff,#b49bff,#ff7a7a)"></i>Arc-en-ciel</button>
+  </div>
+  <h3>« Dis Siri, Adam »</h3>
+  <ol>
+    <li>Ouvre l'appli <strong>Raccourcis</strong> et touche <strong>+</strong>.</li>
+    <li>Ajoute l'action <strong>Ouvrir les URL</strong> et colle ce lien : <br><code id="lienSiri" style="font-size:13px;word-break:break-all;color:var(--texte)"></code></li>
+    <li>Nomme le raccourci <strong>Adam</strong>.</li>
+    <li>Dis « <strong>Dis Siri, Adam</strong> » : je m'ouvre, prêt à t'écouter.</li>
+  </ol>
+  <button class="btn doux" id="copierSiri" type="button">Copier le lien</button>
+  <h3>Confidentialité et données</h3>
+  <label class="coche"><input type="checkbox" id="rgConsent"> <span>Envoyer mes demandes et ma voix à Groq (IA) pour obtenir les réponses</span></label>
+  <p class="petit" id="rgConsentDate"></p>
+  <button class="btn doux" id="rgLegal" type="button">Textes légaux</button>
+  <p class="petit" id="rgSignalements" style="margin-top:12px"></p>
+  <button class="btn doux" id="rgCopierSig" type="button" hidden>Copier mes signalements</button>
+  <button class="btn danger" id="rgEffacerTout" type="button" style="margin-top:10px">Effacer toutes mes données</button>
+  <div class="msg" id="rgEffacerConfirm" hidden>Cela supprime ta clé, ta mémoire, tes notes et ta discussion. <button class="btn danger" id="rgEffacerOui" type="button">Oui, tout effacer</button> <button class="btn doux" id="rgEffacerNon" type="button">Annuler</button></div>
+  <h3>Ce que je sais de toi</h3>
+  <ul class="memoire" id="rgMemoire" style="color:var(--brume);padding-left:20px"></ul>
+  <button class="btn danger" id="rgOublier" type="button">Tout oublier</button>
+  <p style="font-size:13px;margin-top:22px">Adam Web 1.1 · gratuit, pour toujours · tes données restent sur ce téléphone. <a href="#" id="ouvrirLegal" style="color:var(--ciel)">Mentions légales</a></p>
+  <button class="btn large" data-fermer type="button" style="margin-top:6px">Terminé</button>
+</section>
+
+<!-- Textes légaux -->
+<section class="feuille" id="legal" role="dialog" aria-modal="true" aria-labelledby="lgTitre" hidden>
+  <div class="poignee"></div>
+  <h2 id="lgTitre">Informations légales</h2>
+  <div id="legalCorps"></div>
+  <button class="btn doux large" id="legalRetour" type="button" style="margin-top:10px">Retour</button>
+</section>
+
+<!-- Discussion -->
+<section class="feuille" id="discussion" role="dialog" aria-modal="true" aria-labelledby="dcTitre" hidden>
+  <div class="poignee"></div>
+  <h2 id="dcTitre">Discussion</h2>
+  <div class="bulles" id="bulles"></div>
+  <button class="btn doux large" id="dcEffacer" type="button" style="margin-top:10px">Nouvelle discussion</button>
+  <button class="btn large" data-fermer type="button" style="margin-top:10px">Fermer</button>
+</section>
+
+<script src="fourrure.js"></script>
+<script src="legal.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
