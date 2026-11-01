@@ -18,7 +18,7 @@
     pousse: ['#e9ffd9', '#74da5e', '#258f35']
   };
   // intensite des poils : plus c'est grand, plus la peluche est fournie
-  var DENSITE = { adam: 1, nova: 1, mochi: 1, piment: 1, miel: 1, pousse: 1 };
+  var DENSITE = { adam: .3, nova: .3, mochi: .3, piment: .3, miel: .3, pousse: .3 };   // v16.1 telephone : 3x moins de brins (Safari iPhone peinait)
 
   function graine(s) {                            // petit generateur pseudo-aleatoire stable
     var a = s >>> 0;
@@ -150,24 +150,29 @@
     return g;
   }
 
-  function init() {
+  // v16.1 telephone : on ne fabrique les poils que du perso affiche (et des autres au moment ou on les choisit),
+  // en differe pour ne pas bloquer l'ouverture de l'appli.
+  var faits = {};
+  function faire() {
     var svg = document.getElementById('cloudSvg'); if (!svg) return;
-    var corps = svg.querySelectorAll('.corps[data-p]');
-    corps.forEach(function (cg) {
-      var p = cg.getAttribute('data-p'), clip = svg.querySelector('#c-' + p); if (!clip) return;
-      var gc = cg.querySelector(':scope > g[clip-path]'); if (!gc) return;
-      try {
-        var g = fabriquer(p, clip);
-        // les poils passent DERRIERE le corps (ceux du contour depassent) puis on re-dessine un
-        // second jeu par-dessus pour le grain : on clone, le clone est rogne au corps
-        var derriere = g.cloneNode(true); derriere.setAttribute('class', 'poils poilsDehors');
-        cg.insertBefore(derriere, gc);
-        var dessus = g; dessus.setAttribute('class', 'poils poilsDessus');
-        dessus.setAttribute('clip-path', 'url(#c-' + p + ')');
-        gc.parentNode.insertBefore(dessus, gc.nextSibling);
-      } catch (e) { if (window.console) console.warn('[fourrure]', p, e); }
-    });
+    var p = document.body.getAttribute('data-perso') || 'adam';
+    if (faits[p]) return; faits[p] = true;
+    var cg = svg.querySelector('.corps[data-p="' + p + '"]'), clip = svg.querySelector('#c-' + p); if (!cg || !clip) return;
+    var gc = cg.querySelector(':scope > g[clip-path]'); if (!gc) return;
+    try {
+      var g = fabriquer(p, clip);
+      var derriere = g.cloneNode(true); derriere.setAttribute('class', 'poils poilsDehors');
+      cg.insertBefore(derriere, gc);
+      var dessus = g; dessus.setAttribute('class', 'poils poilsDessus');
+      dessus.setAttribute('clip-path', 'url(#c-' + p + ')');
+      gc.parentNode.insertBefore(dessus, gc.nextSibling);
+    } catch (e) { if (window.console) console.warn('[fourrure]', p, e); }
     document.documentElement.classList.add('a-des-poils');
+  }
+  function init() {
+    var plus = function () { setTimeout(faire, 0); };
+    setTimeout(faire, 250);
+    try { new MutationObserver(plus).observe(document.body, { attributes: true, attributeFilter: ['data-perso'] }); } catch (e) {}
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
