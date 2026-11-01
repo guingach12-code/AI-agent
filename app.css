@@ -381,3 +381,8 @@ body.pilote #cloudBody { animation: geleeEcoute 1s ease-in-out infinite; }
 .signaler[disabled]{text-decoration:none;opacity:.7}
 #legalCorps .alCorps{max-height:52svh;color:var(--texte)}
 #legalCorps .alNav button{color:var(--texte)}
+
+
+/* v16.1 mode léger (iPhone) : pas de filtre SVG turbulence ni d'ombre portée animée, ça faisait ramer Safari */
+#cloudBody{filter:none !important}
+#cloud,body.listening #cloud,body.scan #cloud{filter:none !important}
