@@ -386,3 +386,8 @@ body.pilote #cloudBody { animation: geleeEcoute 1s ease-in-out infinite; }
 /* v16.1 mode léger (iPhone) : pas de filtre SVG turbulence ni d'ombre portée animée, ça faisait ramer Safari */
 #cloudBody{filter:none !important}
 #cloud,body.listening #cloud,body.scan #cloud{filter:none !important}
+
+/* v16.2 choix du cerveau */
+.choixCerveau{display:flex;gap:8px;margin:6px 0 12px}
+.choixCerveau .btn{flex:1}
+.choixCerveau .btn[aria-pressed="true"]{background:linear-gradient(135deg,#2f6bff,#22b8ff);color:#fff;border-color:transparent}
