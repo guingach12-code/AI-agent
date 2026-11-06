@@ -10,7 +10,7 @@ var LS = {
   get: function (k, d) { try { var v = localStorage.getItem("adam." + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
   set: function (k, v) { try { localStorage.setItem("adam." + k, JSON.stringify(v)); } catch (e) {} }
 };
-var reglages = Object.assign({ cle: "", voix: "", vitesse: 1.05, theme: "bleu", relais: false, consentIA: false, consentDate: "" }, LS.get("reglages", {}));
+var reglages = Object.assign({ cle: "", voix: "", vitesse: 1.05, theme: "bleu", relais: false, consentIA: false, consentDate: "", cerveau: "groq", cleGemini: "" }, LS.get("reglages", {}));
 function sauverReglages() { LS.set("reglages", reglages); }
 var memoire = LS.get("memoire", []);
 var notes = LS.get("notes", []);
@@ -21,6 +21,11 @@ function sauverHistorique() { historique = historique.slice(-20); LS.set("histor
 var ua = navigator.userAgent || "";
 var estIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 var installee = window.navigator.standalone === true || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
+
+/* v16.2 : deux cerveaux possibles, Groq (par defaut) ou Gemini de Google */
+function cerveauGemini() { return reglages.cerveau === "gemini"; }
+function cleActive() { return cerveauGemini() ? (reglages.cleGemini || "") : (reglages.cle || ""); }
+function nomCerveau() { return cerveauGemini() ? "Gemini" : "Groq"; }
 
 /* ---------- Groq : direct, sinon par le relais du site ---------- */
 var DIRECT = "https://api.groq.com/openai/v1/";
@@ -54,6 +59,146 @@ function chargerModeles(cle) {
     if (!choix.length) choix = ids.filter(function (id) { return !/whisper|guard|tts|orpheus|allam|safeguard/i.test(id); }).slice(0, 3);
     modeles = choix; LS.set("modeles", modeles);
     return ids.length;
+  });
+}
+
+/* ---------- Gemini (Google) : l'autre cerveau ---------- */
+var GEM = "https://generativelanguage.googleapis.com/v1beta/";
+var PREFERES_G = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-flash-lite"];
+var modelesG = LS.get("modelesG", []);
+function gemini(chemin, init, cle) {
+  if (!reglages.consentIA) { var ec = new Error("CONSENT"); ec.code = "CONSENT"; return Promise.reject(ec); }
+  init = Object.assign({}, init);
+  init.headers = Object.assign({ "x-goog-api-key": cle || reglages.cleGemini }, init.headers || {});
+  return fetch(GEM + chemin, init);
+}
+function erreurCle() { var e = new Error("CLE"); e.code = "CLE"; return e; }
+function chargerModelesGemini(cle) {
+  return gemini("models?pageSize=200", { method: "GET" }, cle).then(function (r) {
+    if (r.status === 400 || r.status === 401 || r.status === 403) throw erreurCle();
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  }).then(function (j) {
+    var ids = (j.models || []).filter(function (m) { return (m.supportedGenerationMethods || []).indexOf("generateContent") >= 0; })
+      .map(function (m) { return String(m.name || "").replace(/^models\//, ""); });
+    var choix = PREFERES_G.filter(function (m) { return ids.indexOf(m) >= 0; });
+    if (!choix.length) choix = ids.filter(function (id) { return /^gemini-[\d.]+-flash/.test(id) && !/image|tts|live|audio|embed|robot|computer/i.test(id); }).slice(0, 3);
+    modelesG = choix; LS.set("modelesG", modelesG);
+    return ids.length;
+  });
+}
+function outilsGemini() {
+  return [{ functionDeclarations: OUTILS.map(function (t) {
+    var f = t.function, pr = (f.parameters && f.parameters.properties) || {}, props = {}, n = 0;
+    Object.keys(pr).forEach(function (k) {
+      var o = { type: String(pr[k].type || "string").toUpperCase(), description: pr[k].description || "" };
+      if (pr[k].enum) o.enum = pr[k].enum;
+      props[k] = o; n++;
+    });
+    var d = { name: f.name, description: f.description };
+    if (n) { d.parameters = { type: "OBJECT", properties: props }; if (f.parameters.required && f.parameters.required.length) d.parameters.required = f.parameters.required; }
+    return d;
+  }) }];
+}
+function messagesGemini(messages) {
+  var contents = [], sys = "", noms = {};
+  messages.forEach(function (m) {
+    if (m.role === "system") { sys += (sys ? "\n" : "") + m.content; return; }
+    if (m.role === "tool") {
+      var der = contents[contents.length - 1], part = { functionResponse: { name: noms[m.tool_call_id] || "outil", response: { resultat: String(m.content) } } };
+      if (der && der.role === "user" && der.parts[0] && der.parts[0].functionResponse) der.parts.push(part); else contents.push({ role: "user", parts: [part] });
+      return;
+    }
+    if (m.role === "assistant") {
+      var parts = [];
+      if (m.content) parts.push({ text: m.content });
+      (m.tool_calls || []).forEach(function (c) {
+        noms[c.id] = c.function.name;
+        var a = {}; try { a = JSON.parse(c.function.arguments || "{}"); } catch (e) {}
+        var p = { functionCall: { name: c.function.name, args: a } };
+        if (c.sig) p.thoughtSignature = c.sig;
+        parts.push(p);
+      });
+      if (parts.length) contents.push({ role: "model", parts: parts });
+      return;
+    }
+    contents.push({ role: "user", parts: [{ text: String(m.content || "") }] });
+  });
+  while (contents.length && contents[0].role === "model") contents.shift();
+  return { sys: sys, contents: contents };
+}
+function attenteDemandee(t) {
+  var m = /retry in ([\d.]+)\s*s|"retryDelay":\s*"([\d.]+)s"|try again in ([\d.]+)s/i.exec(t || "");
+  return m ? Math.ceil(parseFloat(m[1] || m[2] || m[3]) * 1000) : 1500;
+}
+function streamGemini(messages, surTexte) {
+  var essais = modelesG.length ? modelesG.slice() : PREFERES_G.slice(0, 3), limite = false, reessaye = {}, conv = messagesGemini(messages);
+  function essayer(i) {
+    if (i >= essais.length) { var e = new Error(limite ? "LIMITE" : "MODELE"); e.code = limite ? "LIMITE" : "MODELE"; return Promise.reject(e); }
+    var corpsReq = { systemInstruction: { parts: [{ text: conv.sys }] }, contents: conv.contents, tools: outilsGemini(), generationConfig: { temperature: .6, maxOutputTokens: 1024 } };
+    return gemini("models/" + essais[i] + ":streamGenerateContent?alt=sse", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpsReq) }).then(function (r) {
+      if (r.status === 401 || r.status === 403) throw erreurCle();
+      if (!r.ok) return r.text().then(function (t) {
+        if (/API key not valid|API_KEY_INVALID/i.test(t)) throw erreurCle();
+        if (r.status === 429) {
+          limite = true;
+          var att = attenteDemandee(t);
+          if (!reessaye[i] && att <= 12000) { reessaye[i] = true; elEtat.textContent = "Un instant…"; return new Promise(function (ok) { setTimeout(ok, att + 300); }).then(function () { return essayer(i); }); }
+        }
+        if (window.console) console.warn("[gemini]", essais[i], r.status, String(t).slice(0, 300));
+        return essayer(i + 1);
+      });
+      var lecteur = r.body.getReader(), dec = new TextDecoder(), tampon = "", contenu = "", appels = [];
+      function lire() {
+        return lecteur.read().then(function (o) {
+          if (o.done) return { contenu: contenu, appels: appels };
+          tampon += dec.decode(o.value, { stream: true });
+          var k;
+          while ((k = tampon.indexOf("\n")) >= 0) {
+            var l = tampon.slice(0, k).trim(); tampon = tampon.slice(k + 1);
+            if (l.indexOf("data:") !== 0) continue;
+            var j; try { j = JSON.parse(l.slice(5).trim()); } catch (e) { continue; }
+            var c = j.candidates && j.candidates[0], parts = (c && c.content && c.content.parts) || [];
+            parts.forEach(function (p) {
+              if (p.thought) return;
+              if (p.functionCall) {
+                appels.push({ id: p.functionCall.id || ("g" + appels.length + "_" + Date.now().toString(36)), type: "function",
+                  function: { name: p.functionCall.name, arguments: JSON.stringify(p.functionCall.args || {}) }, sig: p.thoughtSignature });
+              } else if (p.text) { contenu += p.text; surTexte(p.text); }
+            });
+          }
+          return lire();
+        });
+      }
+      return lire();
+    });
+  }
+  return essayer(0);
+}
+function blobBase64(blob) {
+  return new Promise(function (ok, ko) { var fr = new FileReader(); fr.onload = function () { ok(String(fr.result).split(",")[1] || ""); }; fr.onerror = ko; fr.readAsDataURL(blob); });
+}
+function transcrireGemini(blob) {
+  var base = String(blob.type || "audio/mp4").split(";")[0], types = base === "audio/mp4" ? ["audio/mp4", "audio/m4a", "audio/aac"] : [base];
+  var modele = modelesG[0] || PREFERES_G[0];
+  return blobBase64(blob).then(function (b64) {
+    function tenter(k) {
+      var corpsReq = { contents: [{ role: "user", parts: [
+        { text: "Transcris mot pour mot ce que dit la personne dans cet enregistrement, en français. Réponds uniquement avec la transcription, sans guillemets. S'il n'y a aucune parole, réponds seulement par un point." },
+        { inlineData: { mimeType: types[k], data: b64 } }] }], generationConfig: { temperature: 0, maxOutputTokens: 400 } };
+      return gemini("models/" + modele + ":generateContent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpsReq) }).then(function (r) {
+        if (r.status === 401 || r.status === 403) throw erreurCle();
+        if (r.status === 429) { var e = new Error("LIMITE"); e.code = "LIMITE"; throw e; }
+        if (!r.ok) { if (k + 1 < types.length) return tenter(k + 1); throw new Error("HTTP " + r.status); }
+        return r.json().then(function (j) {
+          var c = j.candidates && j.candidates[0], ps = (c && c.content && c.content.parts) || [];
+          var t = ps.filter(function (p) { return !p.thought; }).map(function (p) { return p.text || ""; }).join(" ").trim();
+          if (/^[.\s…]*$/.test(t)) return "";
+          return HALLU.test(t) ? "" : t;
+        });
+      });
+    }
+    return tenter(0);
   });
 }
 
@@ -205,39 +350,54 @@ function ouvrirMicro() {
     return f;
   });
 }
+var bufNiveau = null, picMicro = 0;
 function niveau() {
+  // v16.2 : lecture en octets (fonctionne sur tous les iPhone, y compris les anciens Safari)
   if (!analyseur) return 0;
-  var b = new Float32Array(analyseur.fftSize); analyseur.getFloatTimeDomainData(b);
-  var s = 0; for (var i = 0; i < b.length; i++) s += b[i] * b[i];
-  return Math.sqrt(s / b.length);
+  if (!bufNiveau || bufNiveau.length !== analyseur.fftSize) bufNiveau = new Uint8Array(analyseur.fftSize);
+  analyseur.getByteTimeDomainData(bufNiveau);
+  var s = 0; for (var i = 0; i < bufNiveau.length; i++) { var v = (bufNiveau[i] - 128) / 128; s += v * v; }
+  return Math.sqrt(s / bufNiveau.length);
 }
 function ecouter(attenteMax) {
   return ouvrirMicro().then(function () {
+    var ctx = audio(); if (ctx && ctx.state !== "running") { try { ctx.resume(); } catch (e) {} }
     var types = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg"], type = "";
     if (window.MediaRecorder && MediaRecorder.isTypeSupported) type = types.find(function (t) { return MediaRecorder.isTypeSupported(t); }) || "";
     var rec = new MediaRecorder(flux, type ? { mimeType: type } : undefined), morceaux = [];
     rec.ondataavailable = function (e) { if (e.data && e.data.size) morceaux.push(e.data); };
     return new Promise(function (ok) {
-      var parole = false, silence = 0, debut = performance.now(), bruit = .008, actives = 0;
-      rec.onstop = function () { enregistreur = null; niveauVoix = 0; ok(parole ? new Blob(morceaux, { type: rec.mimeType || type || "audio/mp4" }) : null); };
+      // v16.2 : seuil plus sensible et adaptatif, fin de phrase moins brusque, arrêt à la main pris en compte
+      var parole = false, silence = 0, debut = performance.now(), bruit = .004, actives = 0, pic = 0;
+      rec.onstop = function () {
+        enregistreur = null; niveauVoix = 0; picMicro = pic;
+        var blob = new Blob(morceaux, { type: rec.mimeType || type || "audio/mp4" }), assez = blob.size > 4000;
+        // analyseur muet (contexte audio bloqué par iOS) : on envoie quand même l'enregistrement, Whisper tranchera
+        var analyseurMuet = pic < .0008 && blob.size > 12000;
+        ok(parole || (rec._manuel && assez) || analyseurMuet ? blob : null);
+      };
       rec.start(200);
       enregistreur = rec;
       (function boucle() {
         if (rec.state === "inactive") return;
-        var n = niveau(), seuil = Math.max(.018, bruit * 3.2), maintenant = performance.now();
-        niveauVoix = n;
-        if (n > seuil) { if (++actives >= 3) parole = true; silence = 0; }
-        else { actives = 0; if (!parole) bruit = bruit * .96 + n * .04; else { silence = silence || maintenant; if (maintenant - silence > 1150) { rec.stop(); return; } } }
+        var n = niveau(), seuil = Math.max(.010, bruit * 2.8), maintenant = performance.now();
+        niveauVoix = n; if (n > pic) pic = n;
+        if (n > seuil || (parole && n > seuil * .6)) {
+          if (++actives >= 2 && !parole) { parole = true; astuce("Je t'entends… touche le micro quand tu as fini."); }
+          silence = 0;
+        } else { actives = 0; if (!parole) bruit = bruit * .95 + n * .05; else { silence = silence || maintenant; if (maintenant - silence > 1600) { rec.stop(); return; } } }
         var ecoule = maintenant - debut;
-        if ((!parole && ecoule > attenteMax) || ecoule > 20000) { rec.stop(); return; }
+        if ((!parole && ecoule > attenteMax) || ecoule > 25000) { rec.stop(); return; }
         requestAnimationFrame(boucle);
       })();
     });
   });
 }
-function arreterEcoute() { if (enregistreur && enregistreur.state !== "inactive") enregistreur.stop(); }
+function arreterEcoute() { if (enregistreur && enregistreur.state !== "inactive") { enregistreur._manuel = true; enregistreur.stop(); } }
 var HALLU = /(sous-titr|sous titr|merci d.avoir regard|abonnez-vous|amara|♪)/i;
 function transcrire(blob) {
+  // Avec une clé Groq, Whisper transcrit (le plus fiable) ; sinon Gemini s'en charge.
+  if (!reglages.cle && reglages.cleGemini) return transcrireGemini(blob);
   var fd = new FormData(), ext = /mp4|m4a|aac/.test(blob.type) ? "m4a" : /webm/.test(blob.type) ? "webm" : /ogg/.test(blob.type) ? "ogg" : "wav";
   fd.append("file", blob, "adam." + ext); fd.append("model", "whisper-large-v3-turbo"); fd.append("language", "fr");
   fd.append("response_format", "json"); fd.append("temperature", "0");
@@ -371,6 +531,9 @@ function decoupeur(surPhrase) {
   };
 }
 function streamIA(messages, surTexte) {
+  return cerveauGemini() ? streamGemini(messages, surTexte) : streamGroq(messages, surTexte);
+}
+function streamGroq(messages, surTexte) {
   var essais = modeles.length ? modeles.slice() : PREFERES.slice(0, 3), limite = false, reessaye = {};
   function essayer(i) {
     if (i >= essais.length) { var e = new Error(limite ? "LIMITE" : "MODELE"); e.code = limite ? "LIMITE" : "MODELE"; return Promise.reject(e); }
@@ -428,7 +591,7 @@ function recevoirPhrase(p) {
 var occupe = false;
 function traiter(texte) {
   if (!texte) return;
-  if (!reglages.cle || !reglages.consentIA) { ouvrir("bienvenue"); montrerEtape(etapeInit()); return; }
+  if (!cleActive() || !reglages.consentIA) { ouvrir("bienvenue"); montrerEtape(etapeInit()); return; }
   occupe = true;
   elDejaDit.textContent = "« " + texte + " »";
   elReponse.textContent = ""; elActions.innerHTML = ""; reponseCourante = ""; $("btnSignaler").hidden = true;
@@ -463,10 +626,10 @@ function traiter(texte) {
     });
   }).catch(function (e) {
     occupe = false; etat("");
-    var msg = e.code === "CLE" ? "Ta clé Groq est refusée. Vérifie-la dans les réglages."
+    var msg = e.code === "CLE" ? "Ta clé " + nomCerveau() + " est refusée. Vérifie-la dans les réglages."
       : e.code === "RELAIS" ? "Ton navigateur bloque l'accès direct à Groq. Le site doit activer le relais (voir le guide)."
-      : e.code === "LIMITE" ? "Groq me demande de patienter un instant (limite gratuite). Réessaie dans une minute."
-      : e.code === "MODELE" ? "Aucun modèle Groq ne répond pour l'instant. Réessaie dans un instant."
+      : e.code === "LIMITE" ? nomCerveau() + " me demande de patienter un instant (limite gratuite). Réessaie dans une minute."
+      : e.code === "MODELE" ? "Aucun modèle " + nomCerveau() + " ne répond pour l'instant. Réessaie dans un instant."
       : "Je n'arrive pas à joindre internet. Vérifie ta connexion.";
     elReponse.textContent = msg; emotion("triste", 3000); dire(msg);
   });
@@ -481,7 +644,7 @@ function cycleEcoute(attente) {
   elActions.innerHTML = "";
   return ecouter(attente || 7000).then(function (blob) {
     if (ecouteAnnulee) { ecouteAnnulee = false; occupe = false; etat(""); return; }
-    if (!blob) { occupe = false; etat(""); astuce("Je n'ai rien entendu. Touche le micro et parle."); return; }
+    if (!blob) { occupe = false; etat(""); astuce(picMicro < .0008 ? "Je ne capte aucun son. Vérifie que le micro est autorisé (Réglages > Safari > Micro) et réessaie." : "Je n'ai rien entendu. Touche le micro et parle."); return; }
     etat("thinking"); elEtat.textContent = "Je t'ai entendu…";
     return transcrire(blob).then(function (t) {
       occupe = false;
@@ -491,13 +654,13 @@ function cycleEcoute(attente) {
   }).catch(function (e) {
     occupe = false; etat("");
     if (e && (e.name === "NotAllowedError" || e.message === "MICRO")) { astuce("Le micro est bloqué : autorise-le dans Réglages > Safari > Micro, ou écris-moi."); return; }
-    var msg = e && e.code === "CONSENT" ? "J'ai besoin de ton accord pour envoyer tes demandes à l'IA : ouvre Réglages > Confidentialité." : e && e.code === "CLE" ? "Ta clé Groq est refusée. Vérifie-la dans les réglages." : e && e.code === "RELAIS" ? "Ton navigateur bloque l'accès direct à Groq." : "Je n'ai pas réussi à t'écouter. Vérifie ta connexion.";
+    var msg = e && e.code === "CONSENT" ? "J'ai besoin de ton accord pour envoyer tes demandes à l'IA : ouvre Réglages > Confidentialité." : e && e.code === "CLE" ? "Ta clé " + (!reglages.cle && reglages.cleGemini ? "Gemini" : "Groq") + " est refusée. Vérifie-la dans les réglages." : e && e.code === "LIMITE" ? "Le service me demande de patienter un instant. Réessaie dans une minute." : e && e.code === "RELAIS" ? "Ton navigateur bloque l'accès direct à Groq." : "Je n'ai pas réussi à t'écouter. Vérifie ta connexion.";
     elReponse.textContent = msg; emotion("triste", 2500);
   });
 }
 function toucheMicro() {
   deverrouillerVoix();
-  if (!reglages.cle || !reglages.consentIA) { ouvrir("bienvenue"); montrerEtape(etapeInit()); return; }
+  if (!cleActive() || !reglages.consentIA) { ouvrir("bienvenue"); montrerEtape(etapeInit()); return; }
   if (enregistreur) { arreterEcoute(); return; }
   if (corps.classList.contains("speaking")) { taire(); }
   if (occupe) return;
@@ -559,7 +722,7 @@ var Feux = (function () {
 })();
 
 /* ---------- feuilles : bienvenue, réglages, discussion ---------- */
-function etapeInit() { return !reglages.consentIA ? 2 : !reglages.cle ? 3 : 4; }
+function etapeInit() { return !reglages.consentIA ? 2 : !cleActive() ? 3 : 4; }
 var voile = $("voile"), ouverte = null;
 function ouvrir(id) {
   fermer(true); ouverte = $(id); voile.hidden = false; ouverte.hidden = false;
@@ -596,7 +759,39 @@ function verifierCle(cle, msgEl) {
     return false;
   });
 }
-$("bvTester").addEventListener("click", function () { verifierCle($("bvCle").value, $("bvMsg")).then(function (ok) { if (ok) setTimeout(function () { montrerEtape(4); }, 700); }); });
+function verifierCleGemini(cle, msgEl) {
+  cle = (cle || "").trim();
+  if (!/^AIza/.test(cle)) { msgEl.className = "msg ko"; msgEl.textContent = "La clé Gemini commence par AIza. Copie-la en entier."; return Promise.resolve(false); }
+  msgEl.className = "msg attente"; msgEl.textContent = "Je vérifie ta clé…";
+  return chargerModelesGemini(cle).then(function () {
+    reglages.cleGemini = cle; sauverReglages();
+    msgEl.className = "msg ok"; msgEl.textContent = modelesG.length ? "Parfait, ta clé Gemini fonctionne (" + modelesG[0] + ")." : "Clé acceptée, mais je ne trouve pas de modèle Gemini Flash sur ce compte.";
+    return !!modelesG.length;
+  }).catch(function (e) {
+    msgEl.className = "msg ko";
+    msgEl.textContent = e.code === "CONSENT" ? "Donne d'abord ton accord (étape précédente ou Réglages > Confidentialité)." : e.code === "CLE" ? "Google refuse cette clé. Vérifie que tu l'as copiée en entier."
+      : "Je n'arrive pas à joindre Google. Vérifie ta connexion.";
+    return false;
+  });
+}
+var choixBv = reglages.cerveau === "gemini" ? "gemini" : "groq";
+function majChoixBv() {
+  var g = choixBv === "gemini";
+  $("bvGroq").setAttribute("aria-pressed", g ? "false" : "true"); $("bvGemini").setAttribute("aria-pressed", g ? "true" : "false");
+  $("bvAideGroq").hidden = g; $("bvAideGemini").hidden = !g;
+  $("bvCle").placeholder = g ? "Colle ta clé AIza… ici" : "Colle ta clé gsk_… ici"; $("bvMsg").textContent = "";
+}
+$("bvGroq").addEventListener("click", function () { choixBv = "groq"; majChoixBv(); });
+$("bvGemini").addEventListener("click", function () { choixBv = "gemini"; majChoixBv(); });
+majChoixBv();
+$("bvTester").addEventListener("click", function () {
+  var g = choixBv === "gemini";
+  (g ? verifierCleGemini : verifierCle)($("bvCle").value, $("bvMsg")).then(function (ok) {
+    if (!ok) return;
+    reglages.cerveau = g ? "gemini" : "groq"; sauverReglages();
+    setTimeout(function () { montrerEtape(4); }, 700);
+  });
+});
 function commencer() {
   LS.set("bienvenueFaite", true); fermer();
   var t = "Coucou, je suis Adam ! Touche le micro et parle-moi.";
@@ -620,8 +815,8 @@ $("cIA").addEventListener("change", function () { $("cAccepter").disabled = !$("
 $("cAccepter").addEventListener("click", function () {
   if (!$("cIA").checked) return;
   reglages.consentIA = true; reglages.consentDate = new Date().toISOString(); sauverReglages();
-  if (reglages.cle && LS.get("bienvenueFaite", false)) { fermer(); elReponse.textContent = "Merci ! Je suis prêt."; }
-  else montrerEtape(reglages.cle ? 4 : 3);
+  if (cleActive() && LS.get("bienvenueFaite", false)) { fermer(); elReponse.textContent = "Merci ! Je suis prêt."; }
+  else montrerEtape(cleActive() ? 4 : 3);
 });
 $("cRefuser").addEventListener("click", function () {
   fermer(); elReponse.textContent = "Sans ton accord, je ne peux pas répondre. Touche le micro quand tu changes d'avis.";
@@ -674,11 +869,21 @@ function majMemoire() {
 }
 $("btnReglages").addEventListener("click", function () {
   $("rgCle").value = ""; $("rgCle").placeholder = reglages.cle ? "Clé enregistrée (laisser vide pour la garder)" : "gsk_…";
+  $("rgCleG").value = ""; $("rgCleG").placeholder = reglages.cleGemini ? "Clé enregistrée (laisser vide pour la garder)" : "AIza…";
+  $("rgCerveau").value = cerveauGemini() ? "gemini" : "groq"; $("rgCerveauMsg").textContent = ""; $("rgMsgG").textContent = "";
   $("rgMsg").textContent = ""; $("rgVitesse").value = reglages.vitesse; $("lienSiri").textContent = lienSiri;
   $("rgEffacerConfirm").hidden = true; majConsentAffichage();
   chargerVoix(); majMemoire(); appliquerTheme(reglages.theme); ouvrir("reglages");
 });
 $("rgTester").addEventListener("click", function () { verifierCle($("rgCle").value, $("rgMsg")); });
+$("rgTesterG").addEventListener("click", function () { verifierCleGemini($("rgCleG").value, $("rgMsgG")); });
+$("rgCerveau").addEventListener("change", function (e) {
+  reglages.cerveau = e.target.value === "gemini" ? "gemini" : "groq"; sauverReglages();
+  var m = $("rgCerveauMsg");
+  if (!cleActive()) { m.className = "msg ko"; m.textContent = "Ajoute ta clé " + nomCerveau() + " ci-dessous pour utiliser ce cerveau."; }
+  else { m.className = "msg ok"; m.textContent = "C'est " + nomCerveau() + " qui me fait réfléchir maintenant."; }
+  if (cerveauGemini() && reglages.cleGemini && !modelesG.length) chargerModelesGemini().catch(function () {});
+});
 $("rgVoix").addEventListener("change", function (e) { reglages.voix = e.target.value; sauverReglages(); });
 $("rgVitesse").addEventListener("input", function (e) { reglages.vitesse = +e.target.value; sauverReglages(); });
 $("rgEssai").addEventListener("click", function () { deverrouillerVoix(); taire(); dire("Coucou, c'est Adam. Voilà ma voix."); });
@@ -716,7 +921,7 @@ document.addEventListener("visibilitychange", function () {
   if (document.hidden) { arreterEcoute(); if (flux) { flux.getTracks().forEach(function (t) { t.stop(); }); flux = null; analyseur = null; } }
 });
 var params = new URLSearchParams(location.search);
-if (!reglages.cle || !reglages.consentIA || !LS.get("bienvenueFaite", false)) { montrerEtape(!reglages.cle && !LS.get("bienvenueFaite", false) ? 1 : etapeInit()); ouvrir("bienvenue"); }
+if (!cleActive() || !reglages.consentIA || !LS.get("bienvenueFaite", false)) { montrerEtape(!cleActive() && !LS.get("bienvenueFaite", false) ? 1 : etapeInit()); ouvrir("bienvenue"); }
 else if (params.get("ecoute") === "1") {
   // Ouvert par « Dis Siri, Adam » : on essaie d'écouter tout de suite, sinon on invite à toucher.
   elReponse.textContent = "Je suis là. Je t'écoute !";
@@ -727,5 +932,6 @@ else if (params.get("ecoute") === "1") {
   if (historique.length) { var avant = historique[historique.length - 2]; if (avant && avant.role === "user") elDejaDit.textContent = "« " + avant.content + " »"; }
 }
 if (!modeles.length && reglages.cle) chargerModeles().catch(function () {});
+if (cerveauGemini() && !modelesG.length && reglages.cleGemini) chargerModelesGemini().catch(function () {});
 window.Adam = { traiter: traiter, emotion: emotion, feux: Feux, theme: appliquerTheme };
 })();
