@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700&family=Hanken+Grotesk:wght@400;500;600&family=Martian+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="app.css?v=3">
+<link rel="stylesheet" href="app.css?v=4">
 </head>
 <body data-perso="adam">
 <div id="fond"></div>
@@ -274,15 +274,30 @@
   </div>
   <div data-etape="3" hidden>
     <h2>Ta clé gratuite pour mon cerveau</h2>
-    <p>Je réfléchis grâce à Groq, c'est <strong>gratuit</strong> :</p>
-    <ol>
-      <li>Ouvre le site de Groq avec le bouton ci-dessous et crée un compte.</li>
-      <li>Touche <strong>Create API Key</strong>, nomme-la « Adam », puis copie la clé (elle commence par <strong>gsk_</strong>).</li>
-      <li>Reviens ici et colle-la.</li>
-    </ol>
-    <a class="btn doux large" href="https://console.groq.com/keys" target="_blank" rel="noopener">Ouvrir console.groq.com</a>
+    <p>Choisis mon cerveau. Les deux ont une offre <strong>gratuite</strong> :</p>
+    <div class="choixCerveau" role="group" aria-label="Choisir le cerveau d'Adam">
+      <button class="btn doux" id="bvGroq" type="button" aria-pressed="true">Groq</button>
+      <button class="btn doux" id="bvGemini" type="button" aria-pressed="false">Gemini (Google)</button>
+    </div>
+    <div id="bvAideGroq">
+      <ol>
+        <li>Ouvre le site de Groq avec le bouton ci-dessous et crée un compte.</li>
+        <li>Touche <strong>Create API Key</strong>, nomme-la « Adam », puis copie la clé (elle commence par <strong>gsk_</strong>).</li>
+        <li>Reviens ici et colle-la.</li>
+      </ol>
+      <a class="btn doux large" href="https://console.groq.com/keys" target="_blank" rel="noopener">Ouvrir console.groq.com</a>
+    </div>
+    <div id="bvAideGemini" hidden>
+      <ol>
+        <li>Ouvre Google AI Studio avec le bouton ci-dessous et connecte-toi avec ton compte Google.</li>
+        <li>Touche <strong>Create API key</strong>, puis copie la clé (elle commence par <strong>AIza</strong>).</li>
+        <li>Reviens ici et colle-la.</li>
+      </ol>
+      <a class="btn doux large" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Ouvrir aistudio.google.com</a>
+      <p style="font-size:13px;margin-top:8px">Avec l'offre gratuite de Gemini, Google peut utiliser tes demandes pour améliorer ses services.</p>
+    </div>
     <div style="height:12px"></div>
-    <input class="champ" id="bvCle" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Colle ta clé gsk_… ici" aria-label="Clé Groq">
+    <input class="champ" id="bvCle" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Colle ta clé gsk_… ici" aria-label="Clé d'accès à l'IA">
     <div class="msg" id="bvMsg"></div>
     <button class="btn large" id="bvTester" type="button" style="margin-top:6px">Vérifier ma clé</button>
     <p style="font-size:13px;margin-top:12px">Ta clé reste sur ce téléphone. Personne d'autre ne la voit.</p>
@@ -299,10 +314,17 @@
 <section class="feuille" id="reglages" role="dialog" aria-modal="true" aria-labelledby="rgTitre" hidden>
   <div class="poignee"></div>
   <h2 id="rgTitre">Réglages</h2>
+  <h3>Cerveau</h3>
+  <select class="champ" id="rgCerveau" aria-label="Choisir le cerveau d'Adam"><option value="groq">Groq (gratuit)</option><option value="gemini">Gemini de Google</option></select>
+  <div class="msg" id="rgCerveauMsg"></div>
   <h3>Clé Groq</h3>
   <div class="ligneChamp"><input class="champ" id="rgCle" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="gsk_…" aria-label="Clé Groq"><button class="btn" id="rgTester" type="button">Vérifier</button></div>
   <div class="msg" id="rgMsg"></div>
   <a href="https://console.groq.com/keys" target="_blank" rel="noopener" style="color:var(--ciel);font-size:14px">Créer ou retrouver ma clé sur console.groq.com</a>
+  <h3>Clé Gemini</h3>
+  <div class="ligneChamp"><input class="champ" id="rgCleG" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="AIza…" aria-label="Clé Gemini"><button class="btn" id="rgTesterG" type="button">Vérifier</button></div>
+  <div class="msg" id="rgMsgG"></div>
+  <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:var(--ciel);font-size:14px">Créer ma clé sur aistudio.google.com</a>
   <h3>Voix</h3>
   <select class="champ" id="rgVoix" aria-label="Voix d'Adam"></select>
   <label style="display:flex;align-items:center;gap:12px;margin-top:12px;color:var(--brume);font-size:15px">Vitesse <input id="rgVitesse" type="range" min="0.8" max="1.4" step="0.05" style="flex:1"></label>
@@ -326,7 +348,7 @@
   </ol>
   <button class="btn doux" id="copierSiri" type="button">Copier le lien</button>
   <h3>Confidentialité et données</h3>
-  <label class="coche"><input type="checkbox" id="rgConsent"> <span>Envoyer mes demandes et ma voix à Groq (IA) pour obtenir les réponses</span></label>
+  <label class="coche"><input type="checkbox" id="rgConsent"> <span>Envoyer mes demandes et ma voix à l'IA choisie (Groq ou Gemini) pour obtenir les réponses</span></label>
   <p class="petit" id="rgConsentDate"></p>
   <button class="btn doux" id="rgLegal" type="button">Textes légaux</button>
   <p class="petit" id="rgSignalements" style="margin-top:12px"></p>
@@ -358,7 +380,7 @@
 </section>
 
 <script src="fourrure.js?v=3"></script>
-<script src="legal.js?v=3"></script>
-<script src="app.js?v=3"></script>
+<script src="legal.js?v=4"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>
