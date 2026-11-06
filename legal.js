@@ -13,7 +13,7 @@
   };
 
   function p() { return Array.prototype.slice.call(arguments).map(function (t) { return '<p>' + t + '</p>'; }).join(''); }
-  function ul(items) { return '<ul>' + items.map(function (t) { return '<li>' + t + '</li>'; }).join('') + '</ul>'; }
+  function ul(items) { return '<ul>' + items.filter(Boolean).map(function (t) { return '<li>' + t + '</li>'; }).join('') + '</ul>'; }
   function h(t) { return '<h4>' + t + '</h4>'; }
   function contactLigne() {
     return L.contact ? 'Contact : <b>' + L.contact + '</b>.' : 'Contact : via la fiche de l’application sur le magasin où tu l’as téléchargée.';
@@ -45,6 +45,7 @@
       h('Ce qui est envoyé à des services tiers, avec ton accord') +
       ul([
         '<b>Groq</b> (États-Unis) : le texte de tes demandes' + (pc ? ', l’enregistrement de ta voix pour le transcrire, et, seulement si tu demandes à Adam de regarder ton écran, une capture de ton écran' : ' et l’enregistrement de ta voix pour le transcrire') + '. But : produire la réponse de l’IA. Politique de Groq : groq.com/privacy-policy.',
+        pc ? null : '<b>Google Gemini</b> (États-Unis), seulement si tu choisis ce cerveau dans Réglages : le texte de tes demandes et, si tu n’as pas de clé Groq, l’enregistrement de ta voix pour le transcrire. But : produire la réponse de l’IA. Avec l’offre gratuite de l’API Gemini, Google peut utiliser ces données pour améliorer ses services ; utilise une clé liée à un projet payant si tu veux l’éviter. Politique de Google : policies.google.com/privacy.',
         pc ? '<b>Microsoft</b> (service de lecture à voix haute de Microsoft Edge) : le texte des réponses d’Adam, pour le lire avec une voix naturelle. Tu peux refuser ; Adam utilise alors les voix de Windows.' : '<b>La voix de ton téléphone</b> lit les réponses. Selon ton appareil, le système peut utiliser un service en ligne (Apple ou Google). Adam n’y envoie rien lui-même.',
         '<b>Open-Meteo</b> : la ville demandée (ou ta position approximative' + (pc ? ' ; sans ville précisée, ton adresse IP est envoyée à GeoJS pour la déduire' : '') + ') pour la météo.',
         pc ? '<b>DuckDuckGo, Google, YouTube et autres sites</b> : quand tu demandes une recherche ou une musique, ta requête est envoyée au site concerné.' : '<b>Wikipédia</b> : le sujet cherché, pour résumer un article.'
@@ -78,8 +79,8 @@
       p('Adam est un assistant IA qui te répond, cherche des informations, lance des minuteurs, prend des notes' + (pc ? ' et peut agir sur ton ordinateur (ouvrir des applications, régler le volume, lire ton écran à ta demande)' : '') + '.') +
       h('2. Licence') +
       p('L’éditeur te concède, gratuitement et sans limite de durée, une licence personnelle, non exclusive et non transférable d’utilisation d’Adam. Tu ne peux ni le vendre, ni le louer, ni le redistribuer modifié, ni retirer les mentions de propriété.') +
-      h('3. Ta clé Groq') +
-      p('Adam fonctionne avec une clé API Groq que <b>tu</b> crées et qui t’appartient. Elle relève de ton compte Groq et des conditions de Groq. Tu es responsable de son usage et des coûts éventuels. Ne la partage avec personne.') +
+      h(pc ? '3. Ta clé Groq' : '3. Ta clé Groq ou Gemini') +
+      p('Adam fonctionne avec une clé API ' + (pc ? 'Groq' : 'Groq ou Gemini (Google)') + ' que <b>tu</b> crées et qui t’appartient. Elle relève de ton compte et des conditions du service concerné. Tu es responsable de son usage et des coûts éventuels. Ne la partage avec personne.') +
       (pc ? h('4. Contrôle de ton ordinateur') + p('Adam n’agit sur ton ordinateur qu’à ta demande. Toute commande système libre te demande une confirmation avant d’être exécutée. Tu restes responsable des actions que tu demandes. Lis la commande affichée avant de dire oui.') : h('4. Ton téléphone') + p('Adam Web ne modifie rien sur ton téléphone. Il n’ouvre un autre service que lorsque tu le demandes.')) +
       h('5. Usages interdits') +
       p('Tu t’engages à ne pas utiliser Adam pour : harceler ou menacer quelqu’un, produire du contenu illégal ou haineux, tromper des personnes (arnaques, usurpation), écrire du code malveillant, ou obtenir de l’aide pour te faire du mal ou en faire à autrui.') +
@@ -136,8 +137,8 @@
       titre: 'Avant de commencer : ce qui part de ' + (pc ? 'ton ordinateur' : 'ton téléphone'),
       intro: 'Adam réfléchit grâce à une intelligence artificielle hébergée par un service tiers. Pour te répondre, il doit lui envoyer certaines données. Rien n’est envoyé tant que tu n’as pas donné ton accord.',
       ia: {
-        label: 'J’accepte qu’Adam envoie à <b>Groq</b> (IA, États-Unis) le texte de mes demandes, l’enregistrement de ma voix' + (pc ? ' et, seulement quand je lui demande de regarder mon écran, une capture de mon écran' : '') + ', pour obtenir ses réponses.',
-        detail: 'Groq reçoit ces données uniquement pendant que tu utilises Adam. L’éditeur d’Adam n’y a jamais accès.'
+        label: 'J’accepte qu’Adam envoie à <b>Groq</b> (IA, États-Unis)' + (pc ? '' : ' ou, si je choisis ce cerveau, à <b>Google Gemini</b> (IA, États-Unis)') + ' le texte de mes demandes, l’enregistrement de ma voix' + (pc ? ' et, seulement quand je lui demande de regarder mon écran, une capture de mon écran' : '') + ', pour obtenir ses réponses.',
+        detail: (pc ? 'Groq' : 'Le service que tu choisis') + ' reçoit ces données uniquement pendant que tu utilises Adam. L’éditeur d’Adam n’y a jamais accès.'
       },
       voix: pc ? {
         label: 'J’accepte qu’Adam envoie le texte de ses réponses à <b>Microsoft</b> pour les lire avec une voix naturelle (facultatif).',
