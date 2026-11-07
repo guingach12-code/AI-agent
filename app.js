@@ -66,11 +66,20 @@ function chargerModeles(cle) {
 var GEM = "https://generativelanguage.googleapis.com/v1beta/";
 var PREFERES_G = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-flash-lite"];
 var modelesG = LS.get("modelesG", []);
+var gemParQuery = LS.get("gemParQuery", false);
 function gemini(chemin, init, cle) {
   if (!reglages.consentIA) { var ec = new Error("CONSENT"); ec.code = "CONSENT"; return Promise.reject(ec); }
-  init = Object.assign({}, init);
-  init.headers = Object.assign({ "x-goog-api-key": cle || reglages.cleGemini }, init.headers || {});
-  return fetch(GEM + chemin, init);
+  // v16.3 : les nouvelles clés AQ. de Google sont refusées en en-tête sur certains comptes : on réessaie en paramètre
+  var k = cle || reglages.cleGemini, url = GEM + chemin, h = Object.assign({}, (init && init.headers) || {});
+  var parParam = function () { return fetch(url + (url.indexOf("?") >= 0 ? "&" : "?") + "key=" + encodeURIComponent(k), Object.assign({}, init, { headers: h })); };
+  if (gemParQuery) return parParam();
+  return fetch(url, Object.assign({}, init, { headers: Object.assign({ "x-goog-api-key": k }, h) })).then(function (r) {
+    if (r.status !== 401 && r.status !== 403) return r;
+    return parParam().then(function (r2) {
+      if (r2.status !== 401 && r2.status !== 403) { gemParQuery = true; LS.set("gemParQuery", true); return r2; }
+      return r;
+    });
+  });
 }
 function erreurCle() { var e = new Error("CLE"); e.code = "CLE"; return e; }
 function chargerModelesGemini(cle) {
@@ -761,7 +770,7 @@ function verifierCle(cle, msgEl) {
 }
 function verifierCleGemini(cle, msgEl) {
   cle = (cle || "").trim();
-  if (!/^AIza/.test(cle)) { msgEl.className = "msg ko"; msgEl.textContent = "La clé Gemini commence par AIza. Copie-la en entier."; return Promise.resolve(false); }
+  if (!/^(AIza|AQ\.)/.test(cle)) { msgEl.className = "msg ko"; msgEl.textContent = "La clé Gemini commence par AQ. ou AIza. Copie-la en entier."; return Promise.resolve(false); }
   msgEl.className = "msg attente"; msgEl.textContent = "Je vérifie ta clé…";
   return chargerModelesGemini(cle).then(function () {
     reglages.cleGemini = cle; sauverReglages();
@@ -779,7 +788,7 @@ function majChoixBv() {
   var g = choixBv === "gemini";
   $("bvGroq").setAttribute("aria-pressed", g ? "false" : "true"); $("bvGemini").setAttribute("aria-pressed", g ? "true" : "false");
   $("bvAideGroq").hidden = g; $("bvAideGemini").hidden = !g;
-  $("bvCle").placeholder = g ? "Colle ta clé AIza… ici" : "Colle ta clé gsk_… ici"; $("bvMsg").textContent = "";
+  $("bvCle").placeholder = g ? "Colle ta clé Gemini (AQ.… ou AIza…) ici" : "Colle ta clé gsk_… ici"; $("bvMsg").textContent = "";
 }
 $("bvGroq").addEventListener("click", function () { choixBv = "groq"; majChoixBv(); });
 $("bvGemini").addEventListener("click", function () { choixBv = "gemini"; majChoixBv(); });
@@ -869,7 +878,7 @@ function majMemoire() {
 }
 $("btnReglages").addEventListener("click", function () {
   $("rgCle").value = ""; $("rgCle").placeholder = reglages.cle ? "Clé enregistrée (laisser vide pour la garder)" : "gsk_…";
-  $("rgCleG").value = ""; $("rgCleG").placeholder = reglages.cleGemini ? "Clé enregistrée (laisser vide pour la garder)" : "AIza…";
+  $("rgCleG").value = ""; $("rgCleG").placeholder = reglages.cleGemini ? "Clé enregistrée (laisser vide pour la garder)" : "AQ.… ou AIza…";
   $("rgCerveau").value = cerveauGemini() ? "gemini" : "groq"; $("rgCerveauMsg").textContent = ""; $("rgMsgG").textContent = "";
   $("rgMsg").textContent = ""; $("rgVitesse").value = reglages.vitesse; $("lienSiri").textContent = lienSiri;
   $("rgEffacerConfirm").hidden = true; majConsentAffichage();
