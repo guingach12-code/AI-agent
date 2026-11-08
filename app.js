@@ -23,7 +23,13 @@ var estIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" &
 var installee = window.navigator.standalone === true || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
 
 /* v16.2 : deux cerveaux possibles, Groq (par defaut) ou Gemini de Google */
-function cerveauGemini() { return reglages.cerveau === "gemini"; }
+function cerveauGemini() { return reglages.cerveau === "gemini" || (!reglages.cle && !!reglages.cleGemini); }
+function passerCerveau(nom) {
+  reglages.cerveau = nom; sauverReglages();
+  var s = document.getElementById("rgCerveau"), m = document.getElementById("rgCerveauMsg");
+  if (s) s.value = nom;
+  if (m) { m.className = "msg ok"; m.textContent = "C'est " + nomCerveau() + " qui me fait réfléchir maintenant."; }
+}
 function cleActive() { return cerveauGemini() ? (reglages.cleGemini || "") : (reglages.cle || ""); }
 function nomCerveau() { return cerveauGemini() ? "Gemini" : "Groq"; }
 
@@ -540,7 +546,12 @@ function decoupeur(surPhrase) {
   };
 }
 function streamIA(messages, surTexte) {
-  return cerveauGemini() ? streamGemini(messages, surTexte) : streamGroq(messages, surTexte);
+  if (cerveauGemini()) return streamGemini(messages, surTexte);
+  // v16.3 : clé Groq refusée ou Groq saturé ? si une clé Gemini existe, Gemini prend le relais
+  return streamGroq(messages, surTexte).catch(function (e) {
+    if (reglages.cleGemini && (e.code === "CLE" || e.code === "MODELE" || e.code === "LIMITE")) return streamGemini(messages, surTexte);
+    throw e;
+  });
 }
 function streamGroq(messages, surTexte) {
   var essais = modeles.length ? modeles.slice() : PREFERES.slice(0, 3), limite = false, reessaye = {};
@@ -794,7 +805,7 @@ $("bvGroq").addEventListener("click", function () { choixBv = "groq"; majChoixBv
 $("bvGemini").addEventListener("click", function () { choixBv = "gemini"; majChoixBv(); });
 majChoixBv();
 $("bvTester").addEventListener("click", function () {
-  var g = choixBv === "gemini";
+  var v = $("bvCle").value.trim(), g = /^(AIza|AQ\.)/.test(v) ? true : /^gsk_/.test(v) ? false : choixBv === "gemini";
   (g ? verifierCleGemini : verifierCle)($("bvCle").value, $("bvMsg")).then(function (ok) {
     if (!ok) return;
     reglages.cerveau = g ? "gemini" : "groq"; sauverReglages();
@@ -884,8 +895,14 @@ $("btnReglages").addEventListener("click", function () {
   $("rgEffacerConfirm").hidden = true; majConsentAffichage();
   chargerVoix(); majMemoire(); appliquerTheme(reglages.theme); ouvrir("reglages");
 });
-$("rgTester").addEventListener("click", function () { verifierCle($("rgCle").value, $("rgMsg")); });
-$("rgTesterG").addEventListener("click", function () { verifierCleGemini($("rgCleG").value, $("rgMsgG")); });
+// v16.3 : la clé est reconnue toute seule (gsk_ = Groq, AQ. ou AIza = Gemini) et le cerveau suit la clé vérifiée
+function testerCleAuto(champ, msg) {
+  var v = $(champ).value.trim();
+  if (/^(AIza|AQ\.)/.test(v)) return verifierCleGemini(v, $(msg)).then(function (ok) { if (ok) passerCerveau("gemini"); });
+  return verifierCle(v, $(msg)).then(function (ok) { if (ok) passerCerveau("groq"); });
+}
+$("rgTester").addEventListener("click", function () { testerCleAuto("rgCle", "rgMsg"); });
+$("rgTesterG").addEventListener("click", function () { testerCleAuto("rgCleG", "rgMsgG"); });
 $("rgCerveau").addEventListener("change", function (e) {
   reglages.cerveau = e.target.value === "gemini" ? "gemini" : "groq"; sauverReglages();
   var m = $("rgCerveauMsg");
