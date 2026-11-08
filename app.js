@@ -23,7 +23,8 @@ var estIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" &
 var installee = window.navigator.standalone === true || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
 
 /* v16.2 : deux cerveaux possibles, Groq (par defaut) ou Gemini de Google */
-function cerveauGemini() { return reglages.cerveau === "gemini" || (!reglages.cle && !!reglages.cleGemini); }
+// v16.4 : Gemini est le cerveau principal. Groq ne sert que s'il n'y a aucune clé Gemini.
+function cerveauGemini() { return !!reglages.cleGemini || !reglages.cle; }
 function passerCerveau(nom) {
   reglages.cerveau = nom; sauverReglages();
   var s = document.getElementById("rgCerveau"), m = document.getElementById("rgCerveauMsg");
@@ -70,36 +71,66 @@ function chargerModeles(cle) {
 
 /* ---------- Gemini (Google) : l'autre cerveau ---------- */
 var GEM = "https://generativelanguage.googleapis.com/v1beta/";
-var PREFERES_G = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-flash-lite"];
+var PREFERES_G = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite"];
+var erreurG = "";   // dernier message d'erreur renvoyé par Google (affiché pour comprendre)
+function nettoyerCle(c) { return String(c || "").replace(/[\s\u200B-\u200D\uFEFF"'«»]/g, ""); }
+function lireErreurG(r) { return r.clone().text().then(function (t) { var m = ""; try { var j = JSON.parse(t); m = (j.error && (j.error.message || j.error.status)) || ""; } catch (e) { m = t; } erreurG = "HTTP " + r.status + (m ? " : " + String(m).slice(0, 160) : ""); return t; }).catch(function () { erreurG = "HTTP " + r.status; return ""; }); }
+function refusAuth(r) { if (r.status === 401 || r.status === 403) return Promise.resolve(true); if (r.status !== 400) return Promise.resolve(false); return lireErreurG(r).then(function (t) { return /API key|API_KEY|credential|auth|token/i.test(t); }); }
 var modelesG = LS.get("modelesG", []);
 var gemParQuery = LS.get("gemParQuery", false);
 function gemini(chemin, init, cle) {
   if (!reglages.consentIA) { var ec = new Error("CONSENT"); ec.code = "CONSENT"; return Promise.reject(ec); }
   // v16.3 : les nouvelles clés AQ. de Google sont refusées en en-tête sur certains comptes : on réessaie en paramètre
-  var k = cle || reglages.cleGemini, url = GEM + chemin, h = Object.assign({}, (init && init.headers) || {});
+  var k = nettoyerCle(cle || reglages.cleGemini), url = GEM + chemin, h = Object.assign({}, (init && init.headers) || {});
+  var parEntete = function () { return fetch(url, Object.assign({}, init, { headers: Object.assign({ "x-goog-api-key": k }, h) })); };
   var parParam = function () { return fetch(url + (url.indexOf("?") >= 0 ? "&" : "?") + "key=" + encodeURIComponent(k), Object.assign({}, init, { headers: h })); };
-  if (gemParQuery) return parParam();
-  return fetch(url, Object.assign({}, init, { headers: Object.assign({ "x-goog-api-key": k }, h) })).then(function (r) {
-    if (r.status !== 401 && r.status !== 403) return r;
-    return parParam().then(function (r2) {
-      if (r2.status !== 401 && r2.status !== 403) { gemParQuery = true; LS.set("gemParQuery", true); return r2; }
-      return r;
+  var premier = gemParQuery ? parParam : parEntete, second = gemParQuery ? parEntete : parParam;
+  // v16.4 : si Google refuse la façon d'envoyer la clé (401/403, ou 400 "clé invalide"), on essaie l'autre façon
+  return premier().then(function (r) {
+    return refusAuth(r).then(function (refus) {
+      if (!refus) return r;
+      return second().then(function (r2) {
+        return refusAuth(r2).then(function (refus2) {
+          if (refus2) return r;
+          gemParQuery = !gemParQuery; LS.set("gemParQuery", gemParQuery); return r2;
+        });
+      });
     });
   });
 }
 function erreurCle() { var e = new Error("CLE"); e.code = "CLE"; return e; }
 function chargerModelesGemini(cle) {
+  // 1) la liste des modèles (certaines clés AQ. n'y ont pas droit : ce n'est pas bloquant)
+  var candidats = PREFERES_G.slice();
   return gemini("models?pageSize=200", { method: "GET" }, cle).then(function (r) {
-    if (r.status === 400 || r.status === 401 || r.status === 403) throw erreurCle();
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    return r.json();
-  }).then(function (j) {
-    var ids = (j.models || []).filter(function (m) { return (m.supportedGenerationMethods || []).indexOf("generateContent") >= 0; })
-      .map(function (m) { return String(m.name || "").replace(/^models\//, ""); });
-    var choix = PREFERES_G.filter(function (m) { return ids.indexOf(m) >= 0; });
-    if (!choix.length) choix = ids.filter(function (id) { return /^gemini-[\d.]+-flash/.test(id) && !/image|tts|live|audio|embed|robot|computer/i.test(id); }).slice(0, 3);
-    modelesG = choix; LS.set("modelesG", modelesG);
-    return ids.length;
+    if (!r.ok) { return lireErreurG(r).then(function () { return null; }); }
+    return r.json().catch(function () { return null; });
+  }).catch(function (e) { if (e && e.code === "CONSENT") throw e; return null; }).then(function (j) {
+    if (j && j.models) {
+      var ids = j.models.filter(function (m) { return (m.supportedGenerationMethods || []).indexOf("generateContent") >= 0; })
+        .map(function (m) { return String(m.name || "").replace(/^models\//, ""); });
+      var choix = PREFERES_G.filter(function (m) { return ids.indexOf(m) >= 0; });
+      ids.forEach(function (id) { if (/^gemini-[\d.]+-flash/.test(id) && !/image|tts|live|audio|embed|robot|computer|preview/i.test(id) && choix.indexOf(id) < 0) choix.push(id); });
+      if (choix.length) candidats = choix;
+    }
+    // 2) un vrai essai de réponse : c'est la seule preuve que la clé marche
+    var limiteVue = false;
+    function essai(i) {
+      if (i >= candidats.length) {
+        if (limiteVue) { modelesG = candidats.slice(0, 4); LS.set("modelesG", modelesG); return "LIMITE"; }
+        var e = new Error("CLE"); e.code = "CLE"; throw e;
+      }
+      var corps = { contents: [{ role: "user", parts: [{ text: "Réponds juste : OK" }] }], generationConfig: { maxOutputTokens: 64 } };
+      return gemini("models/" + candidats[i] + ":generateContent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corps) }, cle).then(function (r) {
+        if (r.ok) { var bon = candidats[i]; modelesG = [bon].concat(candidats.filter(function (m) { return m !== bon; })).slice(0, 5); LS.set("modelesG", modelesG); return bon; }
+        return lireErreurG(r).then(function (t) {
+          if (r.status === 429) { limiteVue = true; return essai(i + 1); }
+          if ((r.status === 400 && /API key|API_KEY|credential/i.test(t)) || r.status === 401 || r.status === 403) { var e = new Error("CLE"); e.code = "CLE"; throw e; }
+          return essai(i + 1);   // modèle inconnu (404) ou autre souci : on essaie le suivant
+        });
+      });
+    }
+    return essai(0);
   });
 }
 function outilsGemini() {
@@ -150,11 +181,10 @@ function streamGemini(messages, surTexte) {
   var essais = modelesG.length ? modelesG.slice() : PREFERES_G.slice(0, 3), limite = false, reessaye = {}, conv = messagesGemini(messages);
   function essayer(i) {
     if (i >= essais.length) { var e = new Error(limite ? "LIMITE" : "MODELE"); e.code = limite ? "LIMITE" : "MODELE"; return Promise.reject(e); }
-    var corpsReq = { systemInstruction: { parts: [{ text: conv.sys }] }, contents: conv.contents, tools: outilsGemini(), generationConfig: { temperature: .6, maxOutputTokens: 1024 } };
+    var corpsReq = { systemInstruction: { parts: [{ text: conv.sys }] }, contents: conv.contents, tools: outilsGemini(), generationConfig: { temperature: .6, maxOutputTokens: 2048 } };
     return gemini("models/" + essais[i] + ":streamGenerateContent?alt=sse", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpsReq) }).then(function (r) {
-      if (r.status === 401 || r.status === 403) throw erreurCle();
-      if (!r.ok) return r.text().then(function (t) {
-        if (/API key not valid|API_KEY_INVALID/i.test(t)) throw erreurCle();
+      if (!r.ok) return lireErreurG(r).then(function (t) {
+        if (r.status === 401 || r.status === 403 || /API key not valid|API_KEY_INVALID/i.test(t)) throw erreurCle();
         if (r.status === 429) {
           limite = true;
           var att = attenteDemandee(t);
@@ -202,9 +232,15 @@ function transcrireGemini(blob) {
         { text: "Transcris mot pour mot ce que dit la personne dans cet enregistrement, en français. Réponds uniquement avec la transcription, sans guillemets. S'il n'y a aucune parole, réponds seulement par un point." },
         { inlineData: { mimeType: types[k], data: b64 } }] }], generationConfig: { temperature: 0, maxOutputTokens: 400 } };
       return gemini("models/" + modele + ":generateContent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpsReq) }).then(function (r) {
-        if (r.status === 401 || r.status === 403) throw erreurCle();
-        if (r.status === 429) { var e = new Error("LIMITE"); e.code = "LIMITE"; throw e; }
-        if (!r.ok) { if (k + 1 < types.length) return tenter(k + 1); throw new Error("HTTP " + r.status); }
+        if (r.ok) return r;
+        return lireErreurG(r).then(function (t) {
+          if (r.status === 401 || r.status === 403 || /API key not valid|API_KEY_INVALID/i.test(t)) throw erreurCle();
+          if (r.status === 429) { var e = new Error("LIMITE"); e.code = "LIMITE"; throw e; }
+          if (k + 1 < types.length) return tenter(k + 1);
+          throw new Error(erreurG || ("HTTP " + r.status));
+        });
+      }).then(function (r) {
+        if (typeof r === "string") return r;
         return r.json().then(function (j) {
           var c = j.candidates && j.candidates[0], ps = (c && c.content && c.content.parts) || [];
           var t = ps.filter(function (p) { return !p.thought; }).map(function (p) { return p.text || ""; }).join(" ").trim();
@@ -412,7 +448,7 @@ function arreterEcoute() { if (enregistreur && enregistreur.state !== "inactive"
 var HALLU = /(sous-titr|sous titr|merci d.avoir regard|abonnez-vous|amara|♪)/i;
 function transcrire(blob) {
   // Avec une clé Groq, Whisper transcrit (le plus fiable) ; sinon Gemini s'en charge.
-  if (!reglages.cle && reglages.cleGemini) return transcrireGemini(blob);
+  if (reglages.cleGemini || !reglages.cle) return transcrireGemini(blob);
   var fd = new FormData(), ext = /mp4|m4a|aac/.test(blob.type) ? "m4a" : /webm/.test(blob.type) ? "webm" : /ogg/.test(blob.type) ? "ogg" : "wav";
   fd.append("file", blob, "adam." + ext); fd.append("model", "whisper-large-v3-turbo"); fd.append("language", "fr");
   fd.append("response_format", "json"); fd.append("temperature", "0");
@@ -646,10 +682,10 @@ function traiter(texte) {
     });
   }).catch(function (e) {
     occupe = false; etat("");
-    var msg = e.code === "CLE" ? "Ta clé " + nomCerveau() + " est refusée. Vérifie-la dans les réglages."
+    var msg = e.code === "CLE" ? "Ta clé " + nomCerveau() + " est refusée. Vérifie-la dans les réglages." + (cerveauGemini() && erreurG ? " (Google : " + erreurG + ")" : "")
       : e.code === "RELAIS" ? "Ton navigateur bloque l'accès direct à Groq. Le site doit activer le relais (voir le guide)."
       : e.code === "LIMITE" ? nomCerveau() + " me demande de patienter un instant (limite gratuite). Réessaie dans une minute."
-      : e.code === "MODELE" ? "Aucun modèle " + nomCerveau() + " ne répond pour l'instant. Réessaie dans un instant."
+      : e.code === "MODELE" ? "Aucun modèle " + nomCerveau() + " ne répond pour l'instant. Réessaie dans un instant." + (cerveauGemini() && erreurG ? " (Google : " + erreurG + ")" : "")
       : "Je n'arrive pas à joindre internet. Vérifie ta connexion.";
     elReponse.textContent = msg; emotion("triste", 3000); dire(msg);
   });
@@ -780,21 +816,26 @@ function verifierCle(cle, msgEl) {
   });
 }
 function verifierCleGemini(cle, msgEl) {
-  cle = (cle || "").trim();
-  if (!/^(AIza|AQ\.)/.test(cle)) { msgEl.className = "msg ko"; msgEl.textContent = "La clé Gemini commence par AQ. ou AIza. Copie-la en entier."; return Promise.resolve(false); }
-  msgEl.className = "msg attente"; msgEl.textContent = "Je vérifie ta clé…";
-  return chargerModelesGemini(cle).then(function () {
-    reglages.cleGemini = cle; sauverReglages();
-    msgEl.className = "msg ok"; msgEl.textContent = modelesG.length ? "Parfait, ta clé Gemini fonctionne (" + modelesG[0] + ")." : "Clé acceptée, mais je ne trouve pas de modèle Gemini Flash sur ce compte.";
-    return !!modelesG.length;
+  cle = nettoyerCle(cle);
+  if (!cle && reglages.cleGemini) cle = reglages.cleGemini;   // champ vide : on revérifie la clé déjà enregistrée
+  if (cle.length < 20) { msgEl.className = "msg ko"; msgEl.textContent = "Colle ta clé Gemini en entier (elle commence par AQ. ou AIza)."; return Promise.resolve(false); }
+  // v16.4 : la clé est enregistrée tout de suite, même si la vérification échoue (fini la clé qui « ne s'enregistre pas »)
+  reglages.cleGemini = cle; reglages.cerveau = "gemini"; sauverReglages();
+  erreurG = ""; msgEl.className = "msg attente"; msgEl.textContent = "Clé enregistrée. Je vérifie qu'elle marche…";
+  return chargerModelesGemini(cle).then(function (res) {
+    msgEl.className = "msg ok";
+    msgEl.textContent = res === "LIMITE" ? "Clé enregistrée et acceptée par Google, mais la limite gratuite est atteinte pour l'instant. Réessaie dans une minute."
+      : "Parfait, ta clé Gemini est enregistrée et fonctionne (" + res + ").";
+    return true;
   }).catch(function (e) {
     msgEl.className = "msg ko";
-    msgEl.textContent = e.code === "CONSENT" ? "Donne d'abord ton accord (étape précédente ou Réglages > Confidentialité)." : e.code === "CLE" ? "Google refuse cette clé. Vérifie que tu l'as copiée en entier."
-      : "Je n'arrive pas à joindre Google. Vérifie ta connexion.";
-    return false;
+    msgEl.textContent = e.code === "CONSENT" ? "Clé enregistrée. Donne d'abord ton accord (Réglages > Confidentialité) pour que je puisse la tester."
+      : e.code === "CLE" ? "Clé enregistrée, mais Google la refuse" + (erreurG ? " (" + erreurG + ")" : "") + ". Vérifie qu'elle est copiée en entier, ou crée-en une nouvelle sur aistudio.google.com."
+      : "Clé enregistrée, mais je n'arrive pas à joindre Google" + (erreurG ? " (" + erreurG + ")" : "") + ". Vérifie ta connexion.";
+    return e.code !== "CLE" && e.code !== "CONSENT";
   });
 }
-var choixBv = reglages.cerveau === "gemini" ? "gemini" : "groq";
+var choixBv = "gemini";   // v16.4 : Gemini par défaut
 function majChoixBv() {
   var g = choixBv === "gemini";
   $("bvGroq").setAttribute("aria-pressed", g ? "false" : "true"); $("bvGemini").setAttribute("aria-pressed", g ? "true" : "false");
@@ -805,7 +846,7 @@ $("bvGroq").addEventListener("click", function () { choixBv = "groq"; majChoixBv
 $("bvGemini").addEventListener("click", function () { choixBv = "gemini"; majChoixBv(); });
 majChoixBv();
 $("bvTester").addEventListener("click", function () {
-  var v = $("bvCle").value.trim(), g = /^(AIza|AQ\.)/.test(v) ? true : /^gsk_/.test(v) ? false : choixBv === "gemini";
+  var v = nettoyerCle($("bvCle").value), g = !/^gsk_/.test(v);
   (g ? verifierCleGemini : verifierCle)($("bvCle").value, $("bvMsg")).then(function (ok) {
     if (!ok) return;
     reglages.cerveau = g ? "gemini" : "groq"; sauverReglages();
@@ -889,7 +930,7 @@ function majMemoire() {
 }
 $("btnReglages").addEventListener("click", function () {
   $("rgCle").value = ""; $("rgCle").placeholder = reglages.cle ? "Clé enregistrée (laisser vide pour la garder)" : "gsk_…";
-  $("rgCleG").value = ""; $("rgCleG").placeholder = reglages.cleGemini ? "Clé enregistrée (laisser vide pour la garder)" : "AQ.… ou AIza…";
+  $("rgCleG").value = ""; majCleAffichage();
   $("rgCerveau").value = cerveauGemini() ? "gemini" : "groq"; $("rgCerveauMsg").textContent = ""; $("rgMsgG").textContent = "";
   $("rgMsg").textContent = ""; $("rgVitesse").value = reglages.vitesse; $("lienSiri").textContent = lienSiri;
   $("rgEffacerConfirm").hidden = true; majConsentAffichage();
@@ -897,9 +938,12 @@ $("btnReglages").addEventListener("click", function () {
 });
 // v16.3 : la clé est reconnue toute seule (gsk_ = Groq, AQ. ou AIza = Gemini) et le cerveau suit la clé vérifiée
 function testerCleAuto(champ, msg) {
-  var v = $(champ).value.trim();
-  if (/^(AIza|AQ\.)/.test(v)) return verifierCleGemini(v, $(msg)).then(function (ok) { if (ok) passerCerveau("gemini"); });
-  return verifierCle(v, $(msg)).then(function (ok) { if (ok) passerCerveau("groq"); });
+  var v = nettoyerCle($(champ).value);
+  if (/^gsk_/.test(v)) return verifierCle(v, $(msg));
+  return verifierCleGemini(v, $(msg)).then(function () { $(champ).value = ""; majCleAffichage(); });
+}
+function majCleAffichage() {
+  $("rgCleG").placeholder = reglages.cleGemini ? "Clé enregistrée : …" + reglages.cleGemini.slice(-4) + " (colle une autre clé pour la changer)" : "AQ.… ou AIza…";
 }
 $("rgTester").addEventListener("click", function () { testerCleAuto("rgCle", "rgMsg"); });
 $("rgTesterG").addEventListener("click", function () { testerCleAuto("rgCleG", "rgMsgG"); });
@@ -957,7 +1001,7 @@ else if (params.get("ecoute") === "1") {
   elReponse.textContent = dernier && dernier.role === "assistant" ? dernier.content : "Coucou ! Touche le micro et parle-moi.";
   if (historique.length) { var avant = historique[historique.length - 2]; if (avant && avant.role === "user") elDejaDit.textContent = "« " + avant.content + " »"; }
 }
-if (!modeles.length && reglages.cle) chargerModeles().catch(function () {});
+if (!modeles.length && reglages.cle && !cerveauGemini()) chargerModeles().catch(function () {});   // v16.4 : on ne touche plus à Groq quand Gemini est là
 if (cerveauGemini() && !modelesG.length && reglages.cleGemini) chargerModelesGemini().catch(function () {});
 window.Adam = { traiter: traiter, emotion: emotion, feux: Feux, theme: appliquerTheme };
 })();
